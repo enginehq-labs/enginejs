@@ -1,0 +1,13 @@
+src/
+test/
+dist-test/
+coverage/
+node_modules/
+
+tsconfig*.json
+*.tsbuildinfo
+.DS_Store
+*.log
+.env
+.env.*
+

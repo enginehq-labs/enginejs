@@ -1,0 +1,36 @@
+{
+  "name": "@enginehq/auth",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./sequelize": {
+      "types": "./dist/sequelize.d.ts",
+      "default": "./dist/sequelize.js"
+    }
+  },
+  "dependencies": {
+    "@enginehq/core": "0.1.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:unit": "npm -C .. --workspace @enginehq/core run build && tsc -p tsconfig.test.json && node --test dist-test/test/unit/*.test.js",
+    "test:integration": "npm -C .. --workspace @enginehq/core run build && tsc -p tsconfig.test.json && node --test dist-test/test/integration/*.test.js",
+    "test": "npm run test:unit && npm run test:integration"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

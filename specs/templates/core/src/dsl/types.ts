@@ -1,0 +1,52 @@
+export type DslIndexSpec = {
+  unique?: string[][];
+  many?: string[][];
+  lower?: string[][];
+};
+
+export type DslFieldSpec = {
+  type?: string;
+  label?: string;
+  length?: number;
+  max?: number;
+  size?: number;
+  required?: boolean;
+  default?: unknown;
+  save?: boolean;
+
+  multi?: boolean;
+  unique?: boolean;
+  primary?: boolean;
+  autoIncrement?: boolean;
+  canfind?: boolean;
+
+  source?: string;
+  sourceid?: string;
+  columnName?: string;
+  as?: string;
+  inverseAs?: string;
+  onDelete?: string;
+  onUpdate?: string;
+
+  transforms?: Array<{ name: string; args?: unknown }>;
+  validate?: Array<{ name: string; args?: unknown }>;
+};
+
+export type DslModelSpec = {
+  table?: string;
+  auto_name?: string[];
+  fields: Record<string, DslFieldSpec>;
+  indexes?: DslIndexSpec;
+  access?: import('../acl/types.js').DslAccessSpec;
+};
+
+export type DslRoot = {
+  $schema?: string;
+  [key: string]: unknown;
+};
+
+export function isDslModelSpec(v: unknown): v is DslModelSpec {
+  if (!v || typeof v !== 'object') return false;
+  const fields = (v as any).fields;
+  return !!fields && typeof fields === 'object' && !Array.isArray(fields);
+}

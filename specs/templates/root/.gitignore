@@ -1,0 +1,37 @@
+# dependencies
+node_modules/
+**/node_modules/
+
+# build outputs
+dist/
+dist-test/
+**/dist/
+**/dist-test/
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# coverage
+coverage/
+**/coverage/
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# env
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# npm artifacts
+*.tgz
+
