@@ -5,21 +5,31 @@
   "license": "MIT",
   "files": [
     "dist",
+    "bin",
     "README.md",
     "LICENSE"
   ],
+  "bin": {
+    "enginehq": "./bin/enginehq.js"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./runtime/app": {
+      "types": "./dist/runtime/app.d.ts",
+      "default": "./dist/runtime/app.js"
     }
   },
   "dependencies": {
     "@enginehq/core": "0.1.0",
     "@enginehq/express": "0.1.0",
-    "@enginehq/auth": "0.1.0"
+    "@enginehq/auth": "0.1.0",
+    "express": "^4.21.2",
+    "tsx": "^4.20.5"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

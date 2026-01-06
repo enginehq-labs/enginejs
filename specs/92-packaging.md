@@ -11,6 +11,10 @@ Status: EngineJS is currently a **Technical Preview**. Expect breaking changes b
 - `@enginehq/express` — Express adapter (HTTP server wiring, request context, envelope, routing)
 - `enginehq` — unscoped umbrella package that re-exports the public API from `@enginehq/core` and other EngineJS packages
 
+## CLI (required)
+
+`enginehq` additionally ships the `enginehq` CLI binary for initializing/running EngineJS apps.
+
 ## Publishing requirements
 
 - Monorepo root (`enginejs/`) is private and not published.
@@ -27,6 +31,7 @@ Status: EngineJS is currently a **Technical Preview**. Expect breaking changes b
   - `.npmignore` to exclude `src/`, `test/`, and `dist-test/` from published tarballs (publish `dist/` output only).
 - Each publishable package MUST additionally define a `"files"` allowlist in `package.json` so publishing does not depend on `.npmignore`.
   - Minimum: `"files": ["dist", "README.md"]`
+  - If a package ships a CLI binary, it must also be included in the allowlist (typically via `dist/**`).
 
 ## READMEs (required)
 

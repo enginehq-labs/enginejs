@@ -2,6 +2,7 @@
 
 ## Changelog (recent)
 
+- 2026-01-06: Added app scaffold + `enginehq` CLI spec (`specs/14-app-init.md`).
 - 2026-01-06: Added `RELEASING.md` and documented npm publish + tag + GitHub release flow.
 - 2026-01-06: Prepared Technical Preview release docs (root README + ROADMAP) and bumped packages to `0.1.0`.
 - 2026-01-02: Initialized EngineJS spec set and moved monolithic spec into `specs/`; established deterministic regeneration contract.

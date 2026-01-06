@@ -143,8 +143,14 @@
       "package.json",
       "tsconfig.json",
       "tsconfig.test.json",
+      "bin/enginehq.js",
       "src/index.ts",
+      "src/cli.ts",
+      "src/runtime/app.ts",
+      "src/runtime/autoload.ts",
+      "src/runtime/config.ts",
       "test/unit/smoke.test.ts",
+      "test/unit/cliInit.test.ts",
       "test/integration/placeholder.test.ts"
     ],
     "tools": [

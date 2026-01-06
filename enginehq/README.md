@@ -10,6 +10,17 @@ Unscoped umbrella package that re-exports EngineJS public API (`@enginehq/core`,
 npm i enginehq
 ```
 
+## CLI
+
+Create a new EngineJS app:
+
+```sh
+npx enginehq init my-app
+cd my-app
+npm i
+npm run dev
+```
+
 ## Usage
 
 ```ts
