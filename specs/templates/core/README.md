@@ -2,7 +2,7 @@
 
 EngineJS core runtime primitives: DSL registry, ORM adapter, pipelines, workflows/outbox, RLS/ACL utilities, and engine bootstrap.
 
-> Status: **Technical Preview (v0.1.1)** — Active development; APIs may change.
+> Status: **Technical Preview (v0.1.2)** — Active development; APIs may change.
 
 ## Install
 

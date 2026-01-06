@@ -2,7 +2,7 @@
 
 Unscoped umbrella package that re-exports EngineJS public API (`@enginehq/core`, `@enginehq/express`, `@enginehq/auth`).
 
-> Status: **Technical Preview (v0.1.1)** — Active development; APIs may change.
+> Status: **Technical Preview (v0.1.2)** — Active development; APIs may change.
 
 ## Install
 

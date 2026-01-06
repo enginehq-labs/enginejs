@@ -7,7 +7,7 @@ EngineJS is a specs-driven TypeScript + Express backend framework for building s
 - pipelines (transforms/validators/plugins)
 - workflows + durable outbox + scheduler/replayer/retention
 
-> Status: **Technical Preview (v0.1.1)** — Active development; APIs may change. Not production-ready yet.
+> Status: **Technical Preview (v0.1.2)** — Active development; APIs may change. Not production-ready yet.
 
 ## Packages
 
@@ -19,40 +19,18 @@ EngineJS is a specs-driven TypeScript + Express backend framework for building s
 ## Install
 
 ```sh
-npm i @enginehq/core @enginehq/express @enginehq/auth
+npm i enginehq
 ```
 
 ## Quickstart
 
-```ts
-import express from 'express';
-import { createEngine } from '@enginehq/core';
-import { createEngineExpressApp } from '@enginehq/express';
-import { getBearerToken, verifyActorAccessTokenHS256 } from '@enginehq/auth';
+Create a new EngineJS app:
 
-const engine = createEngine({
-  app: { name: 'my-app', env: 'development' },
-  db: { url: process.env.DATABASE_URL!, dialect: 'postgres' },
-  dsl: { schemaPath: 'dsl/schema.json', fragments: { modelsDir: 'dsl/models', metaDir: 'dsl/meta' } },
-  auth: { jwt: { accessSecret: process.env.JWT_SECRET || 'dev', accessTtl: '1h' } },
-  acl: {},
-  rls: { subjects: {}, policies: {} },
-  workflows: { enabled: true },
-});
-
-await engine.init();
-
-const app = express();
-app.use(
-  createEngineExpressApp(engine, {
-    resolveActor: async (req) => {
-      const token = getBearerToken(req.header('authorization'));
-      if (!token) return { isAuthenticated: false, subjects: {}, roles: [], claims: {} };
-      return verifyActorAccessTokenHS256({ token, secret: process.env.JWT_SECRET || 'dev' });
-    },
-  }),
-);
-app.listen(3000);
+```sh
+npx enginehq init my-app
+cd my-app
+npm i
+npm run dev
 ```
 
 ## Roadmap

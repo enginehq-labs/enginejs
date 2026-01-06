@@ -1,6 +1,6 @@
 {
   "name": "@enginehq/auth",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "license": "MIT",
   "files": [
@@ -21,7 +21,7 @@
     }
   },
   "dependencies": {
-    "@enginehq/core": "0.1.1"
+    "@enginehq/core": "0.1.2"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
