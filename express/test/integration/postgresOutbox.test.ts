@@ -117,24 +117,10 @@ test('docker postgres: create -> pipeline -> outbox row inserted', async (t) => 
 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'enginejs-pg-it-'));
   const dslDir = path.join(root, 'dsl');
-  const schemaPath = path.join(dslDir, 'schema.json');
   const modelsDir = path.join(dslDir, 'models');
   const metaDir = path.join(dslDir, 'meta');
   fs.mkdirSync(modelsDir, { recursive: true });
   fs.mkdirSync(metaDir, { recursive: true });
-
-  fs.writeFileSync(
-    schemaPath,
-    JSON.stringify(
-      {
-        $schema: 'https://json-schema.org/draft/2020-12/schema',
-        type: 'object',
-        additionalProperties: true,
-      },
-      null,
-      2,
-    ),
-  );
 
   fs.writeFileSync(
     path.join(modelsDir, 'post.json'),
@@ -185,7 +171,7 @@ test('docker postgres: create -> pipeline -> outbox row inserted', async (t) => 
   const engine = createEngine({
     app: { name: 'enginejs-it', env: 'test' },
     db: { url: dbUrl, dialect: 'postgres' },
-    dsl: { schemaPath, fragments: { modelsDir, metaDir } },
+    dsl: { fragments: { modelsDir, metaDir } },
     auth: {
       jwt: { accessSecret: 'x', accessTtl: '1h' },
       sessions: { enabled: false, refreshTtlDays: 30, refreshRotate: true },
@@ -252,24 +238,10 @@ test('docker postgres: workflowRunner processes outbox and runs db.update step',
 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'enginejs-pg-it2-'));
   const dslDir = path.join(root, 'dsl');
-  const schemaPath = path.join(dslDir, 'schema.json');
   const modelsDir = path.join(dslDir, 'models');
   const metaDir = path.join(dslDir, 'meta');
   fs.mkdirSync(modelsDir, { recursive: true });
   fs.mkdirSync(metaDir, { recursive: true });
-
-  fs.writeFileSync(
-    schemaPath,
-    JSON.stringify(
-      {
-        $schema: 'https://json-schema.org/draft/2020-12/schema',
-        type: 'object',
-        additionalProperties: true,
-      },
-      null,
-      2,
-    ),
-  );
 
   fs.writeFileSync(
     path.join(modelsDir, 'post.json'),
@@ -317,7 +289,7 @@ test('docker postgres: workflowRunner processes outbox and runs db.update step',
   const engine = createEngine({
     app: { name: 'enginejs-it2', env: 'test' },
     db: { url: `postgres://postgres:${password}@127.0.0.1:${port}/${dbName}`, dialect: 'postgres' },
-    dsl: { schemaPath, fragments: { modelsDir, metaDir } },
+    dsl: { fragments: { modelsDir, metaDir } },
     auth: {
       jwt: { accessSecret: 'x', accessTtl: '1h' },
       sessions: { enabled: false, refreshTtlDays: 30, refreshRotate: true },
@@ -402,24 +374,10 @@ test('docker postgres: scheduler emits interval/datetime, runner actor modes, re
 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'enginejs-pg-it3-'));
   const dslDir = path.join(root, 'dsl');
-  const schemaPath = path.join(dslDir, 'schema.json');
   const modelsDir = path.join(dslDir, 'models');
   const metaDir = path.join(dslDir, 'meta');
   fs.mkdirSync(modelsDir, { recursive: true });
   fs.mkdirSync(metaDir, { recursive: true });
-
-  fs.writeFileSync(
-    schemaPath,
-    JSON.stringify(
-      {
-        $schema: 'https://json-schema.org/draft/2020-12/schema',
-        type: 'object',
-        additionalProperties: true,
-      },
-      null,
-      2,
-    ),
-  );
 
   fs.writeFileSync(
     path.join(modelsDir, 'post.json'),
@@ -488,7 +446,7 @@ test('docker postgres: scheduler emits interval/datetime, runner actor modes, re
   const engine = createEngine({
     app: { name: 'enginejs-it3', env: 'test' },
     db: { url: `postgres://postgres:${password}@127.0.0.1:${port}/${dbName}`, dialect: 'postgres' },
-    dsl: { schemaPath, fragments: { modelsDir, metaDir } },
+    dsl: { fragments: { modelsDir, metaDir } },
     auth: {
       jwt: { accessSecret: 'x', accessTtl: '1h' },
       sessions: { enabled: false, refreshTtlDays: 30, refreshRotate: true },

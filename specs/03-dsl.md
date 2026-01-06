@@ -28,6 +28,7 @@ Deterministic compilation order:
 
 - Ajv draft 2020-12, `allowUnionTypes: true`
 - DSL MUST be augmented with system fields *before* validation (see below).
+- By default, validation uses the built-in EngineJS DSL schema shipped with `@enginehq/core` (fixed per EngineJS version). Apps may override via `EngineConfig.dsl.schemaPath` or `EngineConfig.dsl.schema`.
 
 Validation errors MUST surface Ajv errors for debugging (without leaking secrets).
 

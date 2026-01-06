@@ -10,24 +10,10 @@ import type { EnginePlugin } from '../../src/plugins/types.js';
 test('createEngine: registers built-in registries and runs plugin hooks', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'enginejs-engine-init-'));
   const dslDir = path.join(root, 'dsl');
-  const schemaPath = path.join(dslDir, 'schema.json');
   const modelsDir = path.join(dslDir, 'models');
   const metaDir = path.join(dslDir, 'meta');
   fs.mkdirSync(modelsDir, { recursive: true });
   fs.mkdirSync(metaDir, { recursive: true });
-
-  fs.writeFileSync(
-    schemaPath,
-    JSON.stringify(
-      {
-        $schema: 'https://json-schema.org/draft/2020-12/schema',
-        type: 'object',
-        additionalProperties: true,
-      },
-      null,
-      2,
-    ),
-  );
 
   fs.writeFileSync(
     path.join(modelsDir, 'customer.json'),
@@ -46,7 +32,7 @@ test('createEngine: registers built-in registries and runs plugin hooks', async 
   const engine = createEngine({
     app: { name: 't', env: 'test' },
     db: { url: 'postgres://example.invalid/db' },
-    dsl: { schemaPath, fragments: { modelsDir, metaDir } },
+    dsl: { fragments: { modelsDir, metaDir } },
     auth: { jwt: { accessSecret: 'x', accessTtl: '1h' }, sessions: { enabled: false, refreshTtlDays: 30, refreshRotate: true } },
     acl: {},
     rls: { subjects: {}, policies: {} },

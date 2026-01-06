@@ -2,6 +2,7 @@
 
 ## Changelog (recent)
 
+- 2026-01-06: Default DSL schema is now versioned and shipped with EngineJS; apps no longer vendor `dsl/schema.json` by default.
 - 2026-01-06: Bumped packages to `0.1.2` and updated root Quickstart to use `enginehq` CLI.
 - 2026-01-06: Bumped packages to `0.1.1` for app scaffold + `enginehq` CLI init/runtime.
 - 2026-01-06: Added app scaffold + `enginehq` CLI spec (`specs/14-app-init.md`).

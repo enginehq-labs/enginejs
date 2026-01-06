@@ -4,6 +4,7 @@ import { AclEngine } from '../acl/engine.js';
 import { compileDslFromFs, type CompiledDsl } from '../dsl/registry.js';
 import type { DslModelSpec, DslRoot } from '../dsl/types.js';
 import { isDslModelSpec } from '../dsl/types.js';
+import { ENGINEJS_DEFAULT_DSL_SCHEMA } from '../dsl/schema.js';
 import { PipelineEngine } from '../pipelines/engine.js';
 import { initSequelizeModelsFromDsl } from '../orm/sequelizeAdapter.js';
 import type { OrmInitResult } from '../orm/types.js';
@@ -162,7 +163,7 @@ export function createEngine(config: EngineConfig): EngineRuntime {
           : {}),
         ...(config.dsl.monolithPath !== undefined ? { monolithPath: config.dsl.monolithPath } : {}),
       },
-      config.dsl.schemaPath,
+      config.dsl.schema ?? config.dsl.schemaPath ?? ENGINEJS_DEFAULT_DSL_SCHEMA,
     );
 
     const dialect = config.db.dialect || 'postgres';

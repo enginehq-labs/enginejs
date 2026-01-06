@@ -29,6 +29,8 @@ test('enginehq initEngineJsApp scaffolds required folders/files', () => {
     assert.ok(fs.existsSync(path.join(appDir, p)), `missing ${p}`);
   }
 
+  assert.equal(fs.existsSync(path.join(appDir, 'dsl', 'schema.json')), false, 'app should not vendor DSL schema file');
+
   const pkg = JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8'));
   assert.equal(pkg.main, './node_modules/enginehq/dist/runtime/app.js');
   assert.equal(pkg.dependencies.enginehq != null, true);
@@ -46,4 +48,3 @@ test('enginehq initEngineJsApp refuses non-empty dir unless --force', () => {
   initEngineJsApp({ dir: appDir, force: true });
   assert.ok(fs.existsSync(path.join(appDir, 'enginejs.config.ts')));
 });
-

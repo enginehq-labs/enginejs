@@ -7,7 +7,6 @@ EngineJS ships an **opinionated app layout** (inspired by file-based conventions
 An EngineJS app is a folder with:
 
 - `dsl/`
-  - `dsl/schema.json` — Ajv schema used by `compileDslFromFs` (can be minimal `{ "type": "object" }` initially)
   - `dsl/models/*.json` — app models
   - `dsl/meta/*.json` — system/meta models (at minimum `workflow_events_outbox` when workflows are enabled)
 - `workflow/*.ts` — workflow specs (file-based registry)
@@ -26,6 +25,17 @@ An EngineJS app is a folder with:
   - `pipelinesDir: "pipeline"`
   - `workflowsDir: "workflow"`
   - `routesDir: "routes"`
+
+## DSL schema (required, versioned)
+
+EngineJS uses a **built-in DSL JSON Schema** that is shipped with `@enginehq/core` and is therefore fixed per EngineJS version.
+
+Apps MUST NOT vendor their own schema file by default.
+
+Optional override (advanced only):
+
+- `EngineConfig.dsl.schemaPath` — validate against a custom schema file
+- `EngineConfig.dsl.schema` — validate against a custom schema object
 
 ## File-based loading conventions (v0.1.x)
 
@@ -74,4 +84,3 @@ The unscoped `enginehq` package must ship a CLI binary:
 - `enginehq init <dir>` — creates the app folder structure and starter files
 - `enginehq start` — runs the app in the current working directory
 - `enginehq dev` — alias of `start` for now (watch mode may come later)
-

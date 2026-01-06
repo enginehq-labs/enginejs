@@ -7,7 +7,6 @@ export default {
     app: { name: "hello-enginejs-app", env: (process.env.NODE_ENV as any) || 'development' },
     db: { url: process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/postgres', dialect: 'postgres' },
     dsl: {
-      schemaPath: 'dsl/schema.json',
       fragments: { modelsDir: 'dsl/models', metaDir: 'dsl/meta' },
     },
     auth: { jwt: { accessSecret: process.env.JWT_SECRET || 'dev', accessTtl: '1h' } },

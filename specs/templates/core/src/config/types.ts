@@ -6,7 +6,8 @@ export type EngineConfig = {
   http?: { basePath?: string; trustProxy?: boolean; hideExistence?: boolean };
   db: { url: string; dialect?: 'postgres' };
   dsl: {
-    schemaPath: string;
+    schemaPath?: string;
+    schema?: Record<string, unknown>;
     fragments: { modelsDir: string; metaDir: string };
     allowMonolithDslJson?: boolean;
     monolithPath?: string;

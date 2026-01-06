@@ -65,6 +65,16 @@ export function initEngineJsApp(opts: InitAppOptions): void {
   fs.mkdirSync(path.join(targetDir, 'pipeline'), { recursive: true });
   fs.mkdirSync(path.join(targetDir, 'routes'), { recursive: true });
 
+  // Cleanup deprecated scaffold files when force-regenerating.
+  if (force) {
+    const deprecated = [path.join(targetDir, 'dsl', 'schema.json')];
+    for (const p of deprecated) {
+      try {
+        if (fs.existsSync(p) && fs.statSync(p).isFile()) fs.rmSync(p);
+      } catch {}
+    }
+  }
+
   writeJsonIfMissing(
     path.join(targetDir, 'package.json'),
     {
@@ -94,7 +104,6 @@ export default {
     app: { name: ${JSON.stringify(name)}, env: (process.env.NODE_ENV as any) || 'development' },
     db: { url: process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/postgres', dialect: 'postgres' },
     dsl: {
-      schemaPath: 'dsl/schema.json',
       fragments: { modelsDir: 'dsl/models', metaDir: 'dsl/meta' },
     },
     auth: { jwt: { accessSecret: process.env.JWT_SECRET || 'dev', accessTtl: '1h' } },
@@ -106,8 +115,6 @@ export default {
 `,
     force,
   );
-
-  writeJsonIfMissing(path.join(targetDir, 'dsl', 'schema.json'), { type: 'object' }, force);
 
   writeJsonIfMissing(
     path.join(targetDir, 'dsl', 'models', 'customer.json'),

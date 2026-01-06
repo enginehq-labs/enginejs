@@ -20,7 +20,7 @@ import { createEngine } from '@enginehq/core';
 const engine = createEngine({
   app: { name: 'my-app', env: 'development' },
   db: { url: process.env.DATABASE_URL!, dialect: 'postgres' },
-  dsl: { schemaPath: 'dsl/schema.json', fragments: { modelsDir: 'dsl/models', metaDir: 'dsl/meta' } },
+  dsl: { fragments: { modelsDir: 'dsl/models', metaDir: 'dsl/meta' } },
   auth: { jwt: { accessSecret: 'dev', accessTtl: '1h' } },
   acl: {},
   rls: { subjects: {}, policies: {} },

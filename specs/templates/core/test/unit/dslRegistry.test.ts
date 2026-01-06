@@ -35,10 +35,7 @@ test('compileDslFromFs: loads fragments deterministically and last-wins on dupli
     role: { fields: { id: { type: 'int' }, role_name: { type: 'string' } } },
   });
 
-  const schemaPath = path.join(root, 'schema.json');
-  writeJson(schemaPath, { type: 'object' });
-
-  const { dsl, sources } = compileDslFromFs({ modelsDir, metaDir }, schemaPath);
+  const { dsl, sources } = compileDslFromFs({ modelsDir, metaDir });
 
   assert.ok(dsl.customer);
   assert.ok(dsl.role);
@@ -55,10 +52,8 @@ test('compileDslFromFs: augments system fields', () => {
   const modelsDir = path.join(root, 'dsl', 'models');
   const metaDir = path.join(root, 'dsl', 'meta');
   writeJson(path.join(modelsDir, 'customer.json'), { customer: { fields: { email: { type: 'string' } } } });
-  const schemaPath = path.join(root, 'schema.json');
-  writeJson(schemaPath, { type: 'object' });
 
-  const { dsl } = compileDslFromFs({ modelsDir, metaDir }, schemaPath);
+  const { dsl } = compileDslFromFs({ modelsDir, metaDir });
   const f = (dsl as any).customer.fields;
   for (const k of ['created_at', 'updated_at', 'deleted', 'deleted_at', 'archived', 'archived_at', 'auto_name']) {
     assert.ok(f[k], `missing ${k}`);
@@ -69,11 +64,9 @@ test('compileDslFromFs: errors when no fragments and monolith disabled', () => {
   const root = tmpDir();
   const modelsDir = path.join(root, 'dsl', 'models');
   const metaDir = path.join(root, 'dsl', 'meta');
-  const schemaPath = path.join(root, 'schema.json');
-  writeJson(schemaPath, { type: 'object' });
 
   assert.throws(
-    () => compileDslFromFs({ modelsDir, metaDir }, schemaPath),
+    () => compileDslFromFs({ modelsDir, metaDir }),
     (e: any) => e instanceof DslLoadError && /No DSL fragments/i.test(e.message),
   );
 });
@@ -84,12 +77,9 @@ test('compileDslFromFs: loads monolith when enabled and fragments absent', () =>
   const metaDir = path.join(root, 'dsl', 'meta');
   const monolithPath = path.join(root, 'dsl.json');
   writeJson(monolithPath, { customer: { fields: { email: { type: 'string' } } } });
-  const schemaPath = path.join(root, 'schema.json');
-  writeJson(schemaPath, { type: 'object' });
 
   const { dsl } = compileDslFromFs(
     { modelsDir, metaDir, allowMonolithDslJson: true, monolithPath },
-    schemaPath,
   );
   assert.ok((dsl as any).customer);
 });
@@ -99,11 +89,9 @@ test('compileDslFromFs: throws DslValidationError when schema rejects DSL', () =
   const modelsDir = path.join(root, 'dsl', 'models');
   const metaDir = path.join(root, 'dsl', 'meta');
   writeJson(path.join(modelsDir, 'customer.json'), { customer: { fields: { email: { type: 'string' } } } });
-  const schemaPath = path.join(root, 'schema.json');
-  writeJson(schemaPath, { type: 'object', required: ['missing'] });
 
   assert.throws(
-    () => compileDslFromFs({ modelsDir, metaDir }, schemaPath),
+    () => compileDslFromFs({ modelsDir, metaDir }, { type: 'object', required: ['missing'] }),
     (e: any) => e instanceof DslValidationError && Array.isArray(e.ajvErrors),
   );
 });
@@ -120,12 +108,9 @@ test('compileDslFromFs: enforces virtual field constraints', () => {
       },
     },
   });
-  const schemaPath = path.join(root, 'schema.json');
-  writeJson(schemaPath, { type: 'object' });
 
   assert.throws(
-    () => compileDslFromFs({ modelsDir, metaDir }, schemaPath),
+    () => compileDslFromFs({ modelsDir, metaDir }),
     (e: any) => e instanceof DslConstraintError && /Virtual field cannot define canfind/i.test(e.message),
   );
 });
-

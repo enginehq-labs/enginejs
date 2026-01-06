@@ -6,6 +6,7 @@ import * as addFormats from 'ajv-formats';
 
 import { DslConstraintError, DslLoadError, DslValidationError } from './errors.js';
 import { isDslModelSpec, type DslModelSpec, type DslRoot } from './types.js';
+import { ENGINEJS_DEFAULT_DSL_SCHEMA } from './schema.js';
 
 export type DslFsConfig = {
   modelsDir: string;
@@ -148,8 +149,16 @@ export function assertVirtualFieldConstraints(dsl: DslRoot): void {
   }
 }
 
-export function validateDslOrThrow(dsl: DslRoot, schemaPath: string): void {
-  const schema = readJsonFile(schemaPath);
+type SchemaInput = string | Record<string, unknown> | undefined;
+
+function resolveSchema(input: SchemaInput): Record<string, unknown> {
+  if (!input) return ENGINEJS_DEFAULT_DSL_SCHEMA;
+  if (typeof input === 'string') return readJsonFile(input) as any;
+  return input;
+}
+
+export function validateDslOrThrow(dsl: DslRoot, schemaInput?: SchemaInput): void {
+  const schema = resolveSchema(schemaInput);
   const ajv = new Ajv2020({ allErrors: true, allowUnionTypes: true });
   (addFormats as any).default?.(ajv);
   const validate = ajv.compile(schema as any);
@@ -157,7 +166,7 @@ export function validateDslOrThrow(dsl: DslRoot, schemaPath: string): void {
   if (!ok) throw new DslValidationError('Invalid DSL schema', validate.errors || []);
 }
 
-export function compileDslFromFs(fsConfig: DslFsConfig, schemaPath: string): CompiledDsl {
+export function compileDslFromFs(fsConfig: DslFsConfig, schemaInput?: SchemaInput): CompiledDsl {
   const modelsDir = path.resolve(fsConfig.modelsDir);
   const metaDir = path.resolve(fsConfig.metaDir);
 
@@ -205,7 +214,7 @@ export function compileDslFromFs(fsConfig: DslFsConfig, schemaPath: string): Com
   }
 
   augmentDslWithSystemFields(dsl);
-  validateDslOrThrow(dsl, schemaPath);
+  validateDslOrThrow(dsl, schemaInput);
   assertVirtualFieldConstraints(dsl);
 
   return { dsl, sources };

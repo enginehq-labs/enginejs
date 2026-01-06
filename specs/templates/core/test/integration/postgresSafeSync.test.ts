@@ -104,24 +104,10 @@ test('docker postgres: safeSync creates tables + widens (varchar->text) and bloc
 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'enginejs-pg-sync-'));
   const dslDir = path.join(root, 'dsl');
-  const schemaPath = path.join(dslDir, 'schema.json');
   const modelsDir = path.join(dslDir, 'models');
   const metaDir = path.join(dslDir, 'meta');
   fs.mkdirSync(modelsDir, { recursive: true });
   fs.mkdirSync(metaDir, { recursive: true });
-
-  fs.writeFileSync(
-    schemaPath,
-    JSON.stringify(
-      {
-        $schema: 'https://json-schema.org/draft/2020-12/schema',
-        type: 'object',
-        additionalProperties: true,
-      },
-      null,
-      2,
-    ),
-  );
 
   fs.writeFileSync(
     path.join(modelsDir, 'post.json'),
@@ -163,7 +149,7 @@ test('docker postgres: safeSync creates tables + widens (varchar->text) and bloc
   const engine = createEngine({
     app: { name: 'enginejs-sync-it', env: 'test' },
     db: { url: `postgres://postgres:${password}@127.0.0.1:${port}/${dbName}`, dialect: 'postgres' },
-    dsl: { schemaPath, fragments: { modelsDir, metaDir } },
+    dsl: { fragments: { modelsDir, metaDir } },
     auth: { jwt: { accessSecret: 'x', accessTtl: '1h' } },
     acl: {},
     rls: { subjects: {}, policies: {} },
@@ -208,7 +194,7 @@ test('docker postgres: safeSync creates tables + widens (varchar->text) and bloc
   const engine2 = createEngine({
     app: { name: 'enginejs-sync-it', env: 'test' },
     db: { url: `postgres://postgres:${password}@127.0.0.1:${port}/${dbName}`, dialect: 'postgres' },
-    dsl: { schemaPath, fragments: { modelsDir, metaDir } },
+    dsl: { fragments: { modelsDir, metaDir } },
     auth: { jwt: { accessSecret: 'x', accessTtl: '1h' } },
     acl: {},
     rls: { subjects: {}, policies: {} },
@@ -248,7 +234,7 @@ test('docker postgres: safeSync creates tables + widens (varchar->text) and bloc
   const engine3 = createEngine({
     app: { name: 'enginejs-sync-it', env: 'test' },
     db: { url: `postgres://postgres:${password}@127.0.0.1:${port}/${dbName}`, dialect: 'postgres' },
-    dsl: { schemaPath, fragments: { modelsDir, metaDir } },
+    dsl: { fragments: { modelsDir, metaDir } },
     auth: { jwt: { accessSecret: 'x', accessTtl: '1h' } },
     acl: {},
     rls: { subjects: {}, policies: {} },
