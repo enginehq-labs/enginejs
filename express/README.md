@@ -2,7 +2,7 @@
 
 Express adapter for EngineJS: request context (actor + services), response envelope, and generic DSL CRUD routes.
 
-> Status: **Technical Preview (v0.1.0)** — Active development; APIs may change.
+> Status: **Technical Preview (v0.1.1)** — Active development; APIs may change.
 
 ## Install
 

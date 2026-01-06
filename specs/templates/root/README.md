@@ -7,7 +7,7 @@ EngineJS is a specs-driven TypeScript + Express backend framework for building s
 - pipelines (transforms/validators/plugins)
 - workflows + durable outbox + scheduler/replayer/retention
 
-> Status: **Technical Preview (v0.1.0)** — Active development; APIs may change. Not production-ready yet.
+> Status: **Technical Preview (v0.1.1)** — Active development; APIs may change. Not production-ready yet.
 
 ## Packages
 

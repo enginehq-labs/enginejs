@@ -77,7 +77,7 @@ export function initEngineJsApp(opts: InitAppOptions): void {
         dev: 'node --loader tsx .',
       },
       dependencies: {
-        enginehq: '^0.1.0',
+        enginehq: '^0.1.1',
       },
     },
     force,

@@ -1,6 +1,6 @@
 {
   "name": "enginehq",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "license": "MIT",
   "files": [
@@ -25,9 +25,9 @@
     }
   },
   "dependencies": {
-    "@enginehq/core": "0.1.0",
-    "@enginehq/express": "0.1.0",
-    "@enginehq/auth": "0.1.0",
+    "@enginehq/core": "0.1.1",
+    "@enginehq/express": "0.1.1",
+    "@enginehq/auth": "0.1.1",
     "express": "^4.21.2",
     "tsx": "^4.20.5"
   },
