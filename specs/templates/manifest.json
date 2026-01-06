@@ -9,6 +9,7 @@
       ".npmignore",
       "LICENSE",
       "README.md",
+      "RELEASING.md",
       "ROADMAP.md",
       "package.json",
       "package-lock.json",

@@ -59,6 +59,10 @@ app.listen(3000);
 
 See `ROADMAP.md`.
 
+## Releasing
+
+See `RELEASING.md`.
+
 ## Development model
 
 This repo is deterministic/specs-driven:
@@ -66,4 +70,3 @@ This repo is deterministic/specs-driven:
 - `specs/` is the source of truth
 - `specs/templates/**` must match generated outputs
 - regenerate via `npm run gen` and validate via `npm test`
-

@@ -48,6 +48,21 @@ Commands:
 - Validate + preview tarballs: `npm run release:check`
 - Publish all: `npm run release:publish`
 
+Notes:
+
+- This npm account has 2FA enabled for writes (`npm profile get`), so publishing requires an OTP.
+- For first-time publishes, you can sanity-check name availability first:
+  - `npm view enginehq` (should 404 before first publish)
+  - `npm view @enginehq/core` (should 404 before first publish)
+
+## Git tags + GitHub releases (required)
+
+For each published version:
+
+- Create and push a matching git tag: `vX.Y.Z`
+- Create a GitHub Release for the tag (use `gh release create ...`)
+- Keep release notes aligned with `specs/99-changelog.md`
+
 ## Determinism requirement
 
 `specs/templates/**` MUST include the publishable package manifests and any lockfiles needed to reproduce installs/builds.
