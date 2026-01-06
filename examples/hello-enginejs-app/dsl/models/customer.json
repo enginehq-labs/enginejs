@@ -1,0 +1,42 @@
+{
+  "customer": {
+    "auto_name": [
+      "email"
+    ],
+    "fields": {
+      "id": {
+        "type": "int",
+        "primary": true,
+        "autoIncrement": true
+      },
+      "email": {
+        "type": "string",
+        "required": true,
+        "canfind": true
+      }
+    },
+    "indexes": {
+      "unique": [
+        [
+          "email"
+        ]
+      ],
+      "many": [],
+      "lower": []
+    },
+    "access": {
+      "read": [
+        "*"
+      ],
+      "create": [
+        "*"
+      ],
+      "update": [
+        "*"
+      ],
+      "delete": [
+        "*"
+      ]
+    }
+  }
+}

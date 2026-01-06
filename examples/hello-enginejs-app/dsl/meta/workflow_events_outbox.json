@@ -1,0 +1,50 @@
+{
+  "workflow_events_outbox": {
+    "fields": {
+      "id": {
+        "type": "int",
+        "primary": true,
+        "autoIncrement": true
+      },
+      "model": {
+        "type": "string"
+      },
+      "action": {
+        "type": "string"
+      },
+      "before": {
+        "type": "jsonb"
+      },
+      "after": {
+        "type": "jsonb"
+      },
+      "changed_fields": {
+        "type": "jsonb"
+      },
+      "origin": {
+        "type": "string"
+      },
+      "origin_chain": {
+        "type": "jsonb"
+      },
+      "parent_event_id": {
+        "type": "string"
+      },
+      "actor": {
+        "type": "jsonb"
+      },
+      "status": {
+        "type": "string",
+        "default": "pending"
+      },
+      "attempts": {
+        "type": "int",
+        "default": 0
+      },
+      "next_run_at": {
+        "type": "datetime"
+      }
+    },
+    "access": {}
+  }
+}
