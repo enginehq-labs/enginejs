@@ -46,6 +46,8 @@ export type WorkflowStep =
 
 export type WorkflowSpec = {
   name?: string;
+  slug?: string;
+  description?: string;
   actorMode?: WorkflowActorMode;
   impersonate?: WorkflowImpersonate;
   triggers: WorkflowTrigger[];

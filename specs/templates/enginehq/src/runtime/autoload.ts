@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import type { Express } from 'express';
 
 import type { EngineRuntime } from '@enginehq/core';
-import type { PipelineRegistry, WorkflowRegistry } from '@enginehq/core';
+import type { ServiceRegistry, WorkflowRegistry } from '@enginehq/core';
 
 function listModuleFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
@@ -25,15 +25,37 @@ async function importFile(filePath: string): Promise<any> {
 export async function autoloadPipelines(args: {
   cwd: string;
   pipelinesDir: string;
-  registry: PipelineRegistry;
+  services: ServiceRegistry;
 }): Promise<void> {
   const dir = path.isAbsolute(args.pipelinesDir) ? args.pipelinesDir : path.join(args.cwd, args.pipelinesDir);
   for (const filePath of listModuleFiles(dir)) {
     const mod = await importFile(filePath);
-    const spec = mod?.default ?? mod?.pipelines ?? null;
-    if (!spec || typeof spec !== 'object') continue;
-    for (const [modelKey, modelSpec] of Object.entries(spec as any)) {
-      args.registry.register(String(modelKey), modelSpec);
+
+    const validators = mod?.validators ?? mod?.default?.validators ?? null;
+    if (validators && typeof validators === 'object') {
+      for (const name of Object.keys(validators as any).sort((a, b) => a.localeCompare(b))) {
+        const fn = (validators as any)[name];
+        if (typeof fn !== 'function') continue;
+        args.services.register(`pipelines.validator.${name}`, 'singleton', () => fn);
+      }
+    }
+
+    const transforms = mod?.transforms ?? mod?.default?.transforms ?? null;
+    if (transforms && typeof transforms === 'object') {
+      for (const name of Object.keys(transforms as any).sort((a, b) => a.localeCompare(b))) {
+        const fn = (transforms as any)[name];
+        if (typeof fn !== 'function') continue;
+        args.services.register(`pipelines.transform.${name}`, 'singleton', () => fn);
+      }
+    }
+
+    const ops = mod?.ops ?? mod?.default?.ops ?? null;
+    if (ops && typeof ops === 'object') {
+      for (const name of Object.keys(ops as any).sort((a, b) => a.localeCompare(b))) {
+        const fn = (ops as any)[name];
+        if (typeof fn !== 'function') continue;
+        args.services.register(`pipelines.custom.${name}`, 'singleton', () => fn);
+      }
     }
   }
 }
@@ -47,9 +69,12 @@ export async function autoloadWorkflows(args: {
   for (const filePath of listModuleFiles(dir)) {
     const mod = await importFile(filePath);
     const spec = mod?.default ?? mod?.workflow ?? null;
-    const name = spec && typeof spec === 'object' ? String((spec as any).name || '') : '';
-    if (!name) continue;
-    args.registry.register(name, spec);
+    const key =
+      spec && typeof spec === 'object'
+        ? String((spec as any).slug || (spec as any).name || '')
+        : '';
+    if (!key) continue;
+    args.registry.register(key, spec);
   }
 }
 
@@ -62,4 +87,3 @@ export async function autoloadRoutes(args: { cwd: string; routesDir: string; app
     await fn({ app: args.app, engine: args.engine });
   }
 }
-

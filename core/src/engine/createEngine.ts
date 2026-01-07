@@ -188,6 +188,15 @@ export function createEngine(config: EngineConfig): EngineRuntime {
       throw new Error('Missing required meta model: dsl (create dsl/meta/dsl.json)');
     }
 
+    for (const modelKey of Object.keys(compiled.dsl).filter((k) => k !== '$schema').sort((a, b) => a.localeCompare(b))) {
+      const spec = (compiled.dsl as any)[modelKey];
+      if (!isDslModelSpec(spec)) continue;
+      const pipelineSpec = (spec as any).pipelines;
+      if (pipelineSpec && typeof pipelineSpec === 'object') {
+        pipelines.register(modelKey, pipelineSpec);
+      }
+    }
+
     const dialect = config.db.dialect || 'postgres';
     sequelize = new Sequelize(config.db.url, { logging: false, dialect: dialect as any });
     orm = initSequelizeModelsFromDsl(sequelize, compiled.dsl);

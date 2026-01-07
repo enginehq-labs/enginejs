@@ -2,19 +2,13 @@ import type { Model, ModelStatic } from 'sequelize';
 
 import type { WorkflowsConfig } from '../config/types.js';
 import type { WorkflowRegistry } from '../services/types.js';
+import { validateWorkflowSpec } from './validate.js';
 
 type Logger = {
   info: (...args: any[]) => void;
   warn: (...args: any[]) => void;
   error: (...args: any[]) => void;
 };
-
-function isWorkflowSpecLike(spec: unknown): boolean {
-  if (!spec || typeof spec !== 'object') return false;
-  const triggers = (spec as any).triggers;
-  const steps = (spec as any).steps;
-  return Array.isArray(triggers) && Array.isArray(steps);
-}
 
 function asBool(v: unknown, fallback: boolean): boolean {
   if (typeof v === 'boolean') return v;
@@ -74,8 +68,8 @@ export class SequelizeWorkflowRegistryLoader {
     let skipped = 0;
 
     for (const row of rows || []) {
-      const name = String((row as any).name || '').trim();
-      if (!name) {
+      const slug = String((row as any).slug || (row as any).name || '').trim();
+      if (!slug) {
         skipped++;
         continue;
       }
@@ -84,15 +78,16 @@ export class SequelizeWorkflowRegistryLoader {
       if (!enabled) continue;
 
       const spec = (row as any).spec ?? null;
-      if (!isWorkflowSpecLike(spec)) {
-        const msg = `[workflows] Invalid workflow spec in DB for "${name}" (expected {triggers[], steps[]})`;
+      const val = validateWorkflowSpec(spec);
+      if (!val.ok) {
+        const msg = `[workflows] Invalid workflow spec in DB for "${slug}"`;
         if (this.deps.strict) throw new Error(msg);
-        this.deps.logger.warn(msg);
+        this.deps.logger.warn(msg, { fields: val.fields });
         skipped++;
         continue;
       }
 
-      this.deps.registry.register(name, spec);
+      this.deps.registry.register(slug, spec);
       loaded++;
     }
 

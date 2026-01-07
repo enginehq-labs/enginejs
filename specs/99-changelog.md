@@ -2,6 +2,11 @@
 
 ## Changelog (recent)
 
+- 2026-01-07: Test scripts now clear `dist-test/` before compiling to prevent stale compiled tests from running (important when renaming/deleting tests).
+- 2026-01-07: Moved per-model pipeline specs into DSL (`model.pipelines`); `pipeline/` folder is now only for pipeline function code (ops/validators/transforms).
+- 2026-01-07: Switched DB-backed workflow management to generic CRUD (`/api/workflow`) using `workflow.access` ACL/RLS; CRUD updates now live-update the in-memory workflow registry without restart.
+- 2026-01-07: Extended `pipeline/` to also host field-level validators/transforms, autoloaded by `enginehq` and callable from DSL by name.
+- 2026-01-07: Added `workflow.slug` (machine key) plus `workflow.name`/`workflow.description` for UI-friendly DB-backed workflow management.
 - 2026-01-07: Added DB-backed workflow registry mode (`engine.workflows.registry="db"`) with `workflow` meta model and CLI seeding (`enginehq workflows sync`) for future UI editing.
 - 2026-01-06: Made safe sync mandatory by requiring `dsl` snapshot meta model; added `enginehq sync` and scaffolded `dsl/meta/dsl.json`.
 - 2026-01-06: Default DSL schema is now versioned and shipped with EngineJS; apps no longer vendor `dsl/schema.json` by default.

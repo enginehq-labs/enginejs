@@ -1,4 +1,5 @@
 import type { DslFieldSpec, DslModelSpec } from '../dsl/types.js';
+import { assertWorkflowSpecOrThrow } from '../workflows/validate.js';
 import type { PipelineAction, PipelineCtx, PipelineModelSpec, PipelineOp, PipelinePhase, PipelineResult } from './types.js';
 import { PipelineNotImplementedError, PipelineValidationError } from './errors.js';
 
@@ -52,6 +53,9 @@ function runCustomOp(ctx: PipelineCtx, op: { name: string; args?: unknown }) {
   return fn(ctx, op.args);
 }
 
+type FieldTransformFn = (ctx: PipelineCtx, args: { field: string; value: unknown; args?: unknown }) => unknown;
+type FieldValidatorFn = (ctx: PipelineCtx, args: { field: string; value: unknown; args?: unknown }) => unknown;
+
 function runFieldBasedTransforms(ctx: PipelineCtx): PipelineResult {
   const out = { ...ctx.input };
   for (const [field, f] of Object.entries(ctx.modelSpec.fields || {})) {
@@ -69,6 +73,13 @@ function runFieldBasedTransforms(ctx: PipelineCtx): PipelineResult {
         out[field] = args;
       } else if (name === 'remove' || name === 'redact') {
         delete out[field];
+      } else {
+        const serviceName = `pipelines.transform.${name}`;
+        if (!ctx.services.has(serviceName)) {
+          throw new PipelineNotImplementedError(`Missing field transform service: ${serviceName}`);
+        }
+        const fn = ctx.services.get<FieldTransformFn>(serviceName);
+        out[field] = fn({ ...ctx, input: out }, { field, value: out[field], args });
       }
     }
   }
@@ -99,6 +110,8 @@ function runFieldBasedValidators(ctx: PipelineCtx): PipelineResult {
 
       if (name === 'email') {
         if (typeof val !== 'string' || !isEmail(val)) errors[field] = 'Invalid email';
+      } else if (name === 'workflowSpec') {
+        assertWorkflowSpecOrThrow(val);
       } else if (name === 'length') {
         if (typeof val !== 'string') continue;
         const min = isPlainObject(args) ? Number((args as any).min ?? 0) : 0;
@@ -116,6 +129,15 @@ function runFieldBasedValidators(ctx: PipelineCtx): PipelineResult {
       } else if (name === 'enum') {
         const allowed = Array.isArray(args) ? args.map((x) => String(x)) : [];
         if (allowed.length && !allowed.includes(String(val))) errors[field] = 'Invalid value';
+      } else {
+        const serviceName = `pipelines.validator.${name}`;
+        if (!ctx.services.has(serviceName)) {
+          throw new PipelineNotImplementedError(`Missing field validator service: ${serviceName}`);
+        }
+        const fn = ctx.services.get<FieldValidatorFn>(serviceName);
+        const res = fn({ ...ctx, input }, { field, value: val, args });
+        if (res === false) errors[field] = 'Invalid';
+        else if (typeof res === 'string' && res.trim()) errors[field] = res.trim();
       }
     }
   }
@@ -205,4 +227,3 @@ export class PipelineEngine {
     return { output: current };
   }
 }
-

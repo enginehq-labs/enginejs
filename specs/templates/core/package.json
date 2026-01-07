@@ -25,8 +25,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:unit": "tsc -p tsconfig.test.json && node --test dist-test/test/unit/*.test.js",
-    "test:integration": "tsc -p tsconfig.test.json && node --test --test-concurrency=1 dist-test/test/integration/*.test.js",
+    "test:unit": "node -e \"import fs from 'node:fs'; fs.rmSync('dist-test',{recursive:true,force:true});\" && tsc -p tsconfig.test.json && node --test dist-test/test/unit/*.test.js",
+    "test:integration": "node -e \"import fs from 'node:fs'; fs.rmSync('dist-test',{recursive:true,force:true});\" && tsc -p tsconfig.test.json && node --test --test-concurrency=1 dist-test/test/integration/*.test.js",
     "test": "npm run test:unit && npm run test:integration"
   },
   "publishConfig": {

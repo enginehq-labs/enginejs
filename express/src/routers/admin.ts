@@ -62,8 +62,7 @@ export function createAdminRouter(deps: { getConfig: () => EngineConfig; getDsl:
       const body = req.body && typeof req.body === 'object' ? (req.body as any) : {};
       const dryRun = isTruthy(body.dryRun);
       const requireSnapshot = isTruthy(body.requireSnapshot);
-      const allowNoSnapshot =
-        body.allowNoSnapshot !== undefined ? isTruthy(body.allowNoSnapshot) : !requireSnapshot;
+      const allowNoSnapshot = body.allowNoSnapshot !== undefined ? isTruthy(body.allowNoSnapshot) : !requireSnapshot;
 
       const report = await safeSync({
         sequelize,
@@ -152,3 +151,4 @@ export function createAdminRouter(deps: { getConfig: () => EngineConfig; getDsl:
 
   return router;
 }
+

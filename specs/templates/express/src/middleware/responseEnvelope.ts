@@ -17,7 +17,7 @@ export type OkOptions = {
 export type FailPayload = {
   code: number;
   message: string;
-  errors?: Record<string, string>;
+  errors?: Record<string, unknown>;
 };
 
 declare global {
@@ -54,4 +54,3 @@ export function responseEnvelope(req: Request, res: Response, next: NextFunction
 
   next();
 }
-

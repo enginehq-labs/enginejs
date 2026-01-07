@@ -16,6 +16,7 @@ export const ENGINEJS_DSL_SCHEMA_2020_12 = {
     properties: {
       table: { type: 'string' },
       auto_name: { type: 'array', items: { type: 'string' } },
+      pipelines: { type: 'object' },
       fields: {
         type: 'object',
         additionalProperties: {
@@ -78,4 +79,3 @@ export function asDslRootSchema(schema: unknown): Record<string, unknown> {
 export function isProbablyDslRoot(v: unknown): v is DslRoot {
   return !!v && typeof v === 'object' && !Array.isArray(v);
 }
-

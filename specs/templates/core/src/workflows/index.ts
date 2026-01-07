@@ -9,3 +9,4 @@ export * from './scheduler.js';
 export * from './replayer.js';
 export * from './maintenance.js';
 export * from './registryDb.js';
+export * from './validate.js';

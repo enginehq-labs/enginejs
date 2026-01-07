@@ -5,6 +5,10 @@ export class DefaultWorkflowRegistry implements WorkflowRegistry {
 
   register(name: string, spec: unknown) {
     if (!name) throw new Error('Workflow name is required');
+    if (spec == null) {
+      this.specs.delete(name);
+      return;
+    }
     this.specs.set(name, spec);
   }
 
@@ -14,5 +18,9 @@ export class DefaultWorkflowRegistry implements WorkflowRegistry {
 
   list() {
     return [...this.specs.keys()].sort((a, b) => a.localeCompare(b));
+  }
+
+  clear() {
+    this.specs.clear();
   }
 }

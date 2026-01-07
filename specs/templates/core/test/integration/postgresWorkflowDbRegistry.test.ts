@@ -175,11 +175,13 @@ test('docker postgres: workflow specs can be loaded from DB registry', async (t)
         workflow: {
           fields: {
             id: { type: 'int', primary: true, autoIncrement: true },
+            slug: { type: 'string' },
             name: { type: 'string' },
+            description: { type: 'text' },
             enabled: { type: 'boolean', default: true },
             spec: { type: 'jsonb' },
           },
-          indexes: { unique: [['name']], many: [], lower: [] },
+          indexes: { unique: [['slug']], many: [['name']], lower: [] },
           access: { read: [], create: [], update: [], delete: [] },
         },
       },
@@ -223,7 +225,9 @@ test('docker postgres: workflow specs can be loaded from DB registry', async (t)
 
   const Workflow = (engine.orm as any).models.workflow;
   await Workflow.create({
+    slug: 'comment-on-post-create',
     name: 'comment-on-post-create',
+    description: 'Create a comment automatically when a post is created.',
     enabled: true,
     spec: {
       actorMode: 'inherit',
@@ -278,4 +282,3 @@ test('docker postgres: workflow specs can be loaded from DB registry', async (t)
 
   await sequelize.close();
 });
-

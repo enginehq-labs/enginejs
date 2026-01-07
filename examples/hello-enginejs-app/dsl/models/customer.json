@@ -3,6 +3,24 @@
     "auto_name": [
       "email"
     ],
+    "pipelines": {
+      "create": {
+        "beforeValidate": [
+          {
+            "op": "lowercase",
+            "field": "email"
+          }
+        ]
+      },
+      "update": {
+        "beforeValidate": [
+          {
+            "op": "lowercase",
+            "field": "email"
+          }
+        ]
+      }
+    },
     "fields": {
       "id": {
         "type": "int",

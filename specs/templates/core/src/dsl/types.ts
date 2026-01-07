@@ -35,6 +35,17 @@ export type DslFieldSpec = {
 export type DslModelSpec = {
   table?: string;
   auto_name?: string[];
+  pipelines?: Partial<
+    Record<
+      'list' | 'read' | 'create' | 'update' | 'delete',
+      Partial<
+        Record<
+          'beforeValidate' | 'validate' | 'beforePersist' | 'afterPersist' | 'response',
+          Array<{ op: string; [k: string]: unknown }>
+        >
+      >
+    >
+  >;
   fields: Record<string, DslFieldSpec>;
   indexes?: DslIndexSpec;
   access?: import('../acl/types.js').DslAccessSpec;

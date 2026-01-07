@@ -2,12 +2,13 @@
   "workflow": {
     "fields": {
       "id": { "type": "int", "primary": true, "autoIncrement": true },
-      "name": { "type": "string", "required": true },
+      "slug": { "type": "string", "required": true, "canfind": true },
+      "name": { "type": "string", "required": true, "canfind": true },
+      "description": { "type": "text" },
       "enabled": { "type": "boolean", "default": true },
-      "spec": { "type": "jsonb" }
+      "spec": { "type": "jsonb", "required": true, "validate": [{ "name": "workflowSpec" }] }
     },
-    "indexes": { "unique": [["name"]], "many": [], "lower": [] },
-    "access": {}
+    "indexes": { "unique": [["slug"]], "many": [["name"]], "lower": [] },
+    "access": { "read": ["admin"], "create": ["admin"], "update": ["admin"], "delete": ["admin"] }
   }
 }
-

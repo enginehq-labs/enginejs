@@ -21,11 +21,14 @@ export async function startEngineJsApp(cwd = process.cwd()): Promise<void> {
   await engine.init();
 
   const services = engine.services;
-  const pipelines = services.resolve('pipelines', { scope: 'singleton' });
   const workflows = services.resolve('workflows', { scope: 'singleton' });
 
   const autoload = cfg.autoload ?? {};
-  await autoloadPipelines({ cwd, pipelinesDir: autoload.pipelinesDir ?? 'pipeline', registry: pipelines as any });
+  await autoloadPipelines({
+    cwd,
+    pipelinesDir: autoload.pipelinesDir ?? 'pipeline',
+    services,
+  });
   if ((cfg.engine.workflows as any)?.registry !== 'db') {
     await autoloadWorkflows({ cwd, workflowsDir: autoload.workflowsDir ?? 'workflow', registry: workflows as any });
   }

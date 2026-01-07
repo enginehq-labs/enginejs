@@ -73,6 +73,33 @@ Errors MUST be consistent:
 - Adapter MUST use a `migrationRunner` service if present (job-scoped or singleton).
 - If no `migrationRunner` service is registered, endpoints MUST return 501 with `Misconfigured`.
 
+## Workflow management (DB-backed workflows)
+
+When `engine.workflows.registry="db"`, EngineJS apps store workflow definitions in the `workflow` meta model and manage workflows through **generic CRUD** (`/api/workflow`) using the `workflow` model’s ACL/RLS.
+
+### Requirements
+
+- Requires `dsl/meta/workflow.json` with fields:
+  - `slug` (string, unique) — machine-readable key
+  - `name` (string) — display name
+  - `description` (text) — optional UI description
+  - `enabled` (boolean)
+  - `spec` (jsonb) — the workflow spec (triggers/steps/etc.)
+- CRUD create/update/delete on the `workflow` model MUST update the in-memory workflow registry in-process (no restart needed for API-driven edits).
+- Workflow `spec` MUST be validated during CRUD `validate` phase (so UI gets field-level errors via the normal CRUD error envelope).
+
+### Authorization
+
+Use the normal CRUD authorization:
+
+- model-level ACL from `workflow.access`
+- RLS policies for the active actor (if configured)
+
+### Error codes (MVP)
+
+- Invalid workflow spec: `400` with `errors.root="InvalidWorkflowSpec"` and `errors.fields` containing per-path messages.
+- Not found: `404` with `errors.root="Not found"`.
+
 ## Workflow outbox (when enabled)
 
 When `config.workflows` is enabled, create/update/delete MUST enqueue a durable outbox event after `afterPersist` and before the HTTP response (see `specs/08-workflows-outbox.md`).

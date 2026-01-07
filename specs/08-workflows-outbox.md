@@ -76,10 +76,12 @@ EngineJS MUST support DB-backed workflow definitions so non-dev operators can ed
 
 When using DB-backed workflows, apps SHOULD define a meta model with key `workflow` (in `dsl/meta/workflow.json`) with at least:
 
-- `name` (string)
+- `slug` (string) — machine-readable unique key (registry key)
+- `name` (string) — user-friendly display name
+- `description` (text, optional)
 - `enabled` (boolean, default true)
 - `spec` (jsonb) — the workflow spec payload (triggers/steps/actor mode/retry)
-- `indexes.unique = [["name"]]` (unique name)
+- `indexes.unique = [["slug"]]` (unique slug)
 
 ### Registry modes
 
@@ -90,10 +92,18 @@ When using DB-backed workflows, apps SHOULD define a meta model with key `workfl
 
 When `registry=db`, the workflow files directory becomes a developer authoring surface only (seed/export/import), not the runtime source of truth.
 
+### Live updates (UI editing)
+
+When `registry=db`, API-driven edits MUST take effect without a process restart:
+
+- create/update/delete through generic CRUD on model `workflow` (`/api/workflow`) MUST update the in-memory workflow registry in-process.
+- disabled or deleted workflows MUST be removed from the registry.
+
 ### Validation policy
 
 - When loading DB workflows, EngineJS MUST validate that each `spec` has `triggers[]` and `steps[]`.
 - Invalid specs SHOULD be skipped with a log warning by default; when `engine.workflows.strict=true`, invalid specs MUST fail startup.
+  - CRUD MUST prevent invalid workflow specs from being persisted by validating `workflow.spec` during the normal CRUD `validate` phase.
 
 Minimum supported workflow fields:
 
@@ -103,6 +113,12 @@ Minimum supported workflow fields:
   - built-in: `db.update`
   - built-in: `log`
   - extensible: `custom`
+
+Optional workflow metadata fields (used by DB seeding/UI):
+
+- `slug` (string) — machine-readable key
+- `name` (string) — display name (UI)
+- `description` (string)
 
 ### Step: `db.update` (MVP)
 

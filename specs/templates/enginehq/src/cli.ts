@@ -72,7 +72,7 @@ export function initEngineJsApp(opts: InitAppOptions): void {
 
   // Cleanup deprecated scaffold files when force-regenerating.
   if (force) {
-    const deprecated = [path.join(targetDir, 'dsl', 'schema.json')];
+    const deprecated = [path.join(targetDir, 'dsl', 'schema.json'), path.join(targetDir, 'pipeline', 'customer.pipeline.ts')];
     for (const p of deprecated) {
       try {
         if (fs.existsSync(p) && fs.statSync(p).isFile()) fs.rmSync(p);
@@ -126,6 +126,10 @@ export default {
     {
       customer: {
         auto_name: ['email'],
+        pipelines: {
+          create: { beforeValidate: [{ op: 'lowercase', field: 'email' }] },
+          update: { beforeValidate: [{ op: 'lowercase', field: 'email' }] },
+        },
         fields: {
           id: { type: 'int', primary: true, autoIncrement: true },
           email: { type: 'string', required: true, canfind: true },
@@ -188,37 +192,57 @@ export default {
       workflow: {
         fields: {
           id: { type: 'int', primary: true, autoIncrement: true },
-          name: { type: 'string', required: true },
+          slug: { type: 'string', required: true, canfind: true },
+          name: { type: 'string', required: true, canfind: true },
+          description: { type: 'text' },
           enabled: { type: 'boolean', default: true },
-          spec: { type: 'jsonb' },
+          spec: { type: 'jsonb', required: true, validate: [{ name: 'workflowSpec' }] },
         },
-        indexes: { unique: [['name']], many: [], lower: [] },
-        access: {},
+        indexes: { unique: [['slug']], many: [['name']], lower: [] },
+        access: { read: ['admin'], create: ['admin'], update: ['admin'], delete: ['admin'] },
       },
     },
     force,
   );
 
   writeFileIfMissing(
-    path.join(targetDir, 'pipeline', 'customer.pipeline.ts'),
-    `export default {
-  customer: {
-    create: {
-      beforeValidate: [
-        {
-          op: 'lowercase',
-          field: 'email',
-        },
-      ],
-    },
-    update: {
-      beforeValidate: [
-        {
-          op: 'lowercase',
-          field: 'email',
-        },
-      ],
-    },
+    path.join(targetDir, 'pipeline', 'validators.ts'),
+    `import type { PipelineCtx } from '@enginehq/core';
+
+export const validators = {
+  // Return a string to fail validation; return void/true to pass.
+  nonEmptyString: (_ctx: PipelineCtx, args: { value: unknown }) => {
+    if (typeof args.value === 'string' && args.value.trim()) return;
+    return 'Required';
+  },
+} as const;
+`,
+    force,
+  );
+
+  writeFileIfMissing(
+    path.join(targetDir, 'pipeline', 'transforms.ts'),
+    `import type { PipelineCtx } from '@enginehq/core';
+
+export const transforms = {
+  // Return the transformed value.
+  trimString: (_ctx: PipelineCtx, args: { value: unknown }) => {
+    return typeof args.value === 'string' ? args.value.trim() : args.value;
+  },
+} as const;
+`,
+    force,
+  );
+
+  writeFileIfMissing(
+    path.join(targetDir, 'pipeline', 'ops.ts'),
+    `import type { PipelineCtx } from '@enginehq/core';
+
+export const ops = {
+  // In a model pipeline spec: { op: 'custom', name: '<opName>', args?: any }
+  logPayload: (ctx: PipelineCtx, args: unknown) => {
+    void args;
+    console.log('[pipeline op] payload', { model: ctx.modelKey, action: ctx.action, phase: ctx.phase, input: ctx.input });
   },
 } as const;
 `,
@@ -228,7 +252,9 @@ export default {
   writeFileIfMissing(
     path.join(targetDir, 'workflow', 'customer-created.ts'),
     `export default {
-  name: 'customer-created',
+  slug: 'customer-created',
+  name: 'Customer Created',
+  description: 'Runs when a customer is created.',
   triggers: [{ type: 'model', model: 'customer', actions: ['create'] }],
   steps: [{ op: 'log', message: 'customer created' }],
 } as const;

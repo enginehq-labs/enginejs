@@ -89,3 +89,9 @@ If a field defines `{ source, sourceid }` and `multi != true`:
 ## ACL `access`
 
 Models MAY define an `access` object to control CRUD authorization (see `specs/06-auth-acl-rls.md`).
+
+## Pipelines (per-model)
+
+Models MAY define a `pipelines` object to configure pipeline ops per CRUD action and phase.
+
+`pipelines` MUST match the pipeline spec shape in `specs/07-pipelines.md`.

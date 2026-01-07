@@ -14,30 +14,34 @@ function parseArgs(argv: string[]) {
 
 async function upsertWorkflow({
   workflowModel,
+  slug,
   name,
+  description,
   spec,
   overwrite,
 }: {
   workflowModel: any;
+  slug: string;
   name: string;
+  description: string;
   spec: unknown;
   overwrite: boolean;
 }) {
   const existing = await workflowModel.findOne({
-    where: { name, deleted: false, archived: false },
+    where: { slug, deleted: false, archived: false },
     raw: true,
   });
 
-  if (existing && !overwrite) return { name, action: 'skipped' as const };
+  if (existing && !overwrite) return { slug, action: 'skipped' as const };
 
-  const row = { name, enabled: true, spec };
+  const row = { slug, name, description, enabled: true, spec };
   if (existing) {
     await workflowModel.update(row, { where: { id: existing.id } });
-    return { name, action: 'updated' as const };
+    return { slug, action: 'updated' as const };
   }
 
   await workflowModel.create(row);
-  return { name, action: 'created' as const };
+  return { slug, action: 'created' as const };
 }
 
 export async function syncWorkflowsFromFsToDb(cwd = process.cwd()): Promise<void> {
@@ -63,10 +67,13 @@ export async function syncWorkflowsFromFsToDb(cwd = process.cwd()): Promise<void
     throw new Error(`Missing workflow model "${modelKey}" in ORM; define dsl/meta/${modelKey}.json and run \`enginehq sync\``);
   }
 
-  const results: Array<{ name: string; action: 'created' | 'updated' | 'skipped' }> = [];
+  const results: Array<{ slug: string; action: 'created' | 'updated' | 'skipped' }> = [];
   for (const name of registry.list()) {
     const spec = registry.get(name);
-    results.push(await upsertWorkflow({ workflowModel, name, spec, overwrite }));
+    const slug = spec && typeof spec === 'object' ? String((spec as any).slug || name) : String(name);
+    const displayName = spec && typeof spec === 'object' ? String((spec as any).name || slug) : slug;
+    const description = spec && typeof spec === 'object' ? String((spec as any).description || '') : '';
+    results.push(await upsertWorkflow({ workflowModel, slug, name: displayName, description, spec, overwrite }));
   }
 
   process.stdout.write(JSON.stringify({ ok: true, overwrite, results }, null, 2) + '\n');
@@ -79,4 +86,3 @@ if (entry && import.meta.url === pathToFileURL(entry).href) {
     process.exit(1);
   });
 }
-

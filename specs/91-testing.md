@@ -55,3 +55,9 @@ At monorepo root:
 
 - tests must not rely on wall clock time, randomness, or filesystem ordering without explicit sorting
 - any temp directories used in tests are allowed, but must not change repo outputs
+
+## Build output hygiene
+
+TypeScript test builds MUST not allow stale compiled tests to linger.
+
+- Workspace `test:unit` and `test:integration` scripts MUST clear `dist-test/` before running `tsc`.

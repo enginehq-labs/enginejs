@@ -93,6 +93,7 @@
       "src/workflows/replayer.ts",
       "src/workflows/maintenance.ts",
       "src/workflows/registryDb.ts",
+      "src/workflows/validate.ts",
       "src/services/types.ts",
       "src/services/DefaultServiceRegistry.ts",
       "src/services/DefaultPipelineRegistry.ts",
@@ -105,6 +106,7 @@
       "test/unit/pipelineEngine.test.ts",
       "test/unit/rlsEngine.test.ts",
       "test/unit/workflowEngine.test.ts",
+      "test/unit/workflowValidate.test.ts",
       "test/integration/engineInit.test.ts"
       ,
       "test/integration/postgresSafeSync.test.ts"
@@ -134,6 +136,7 @@
       "test/unit/expressAdapter.test.ts",
       "test/integration/placeholder.test.ts",
       "test/integration/postgresAdminSync.test.ts",
+      "test/integration/postgresCrudWorkflows.test.ts",
       "test/integration/postgresAdminMigrations.test.ts",
       "test/integration/postgresWorkflowDbEnforcement.test.ts",
       "test/integration/postgresRlsVia.test.ts",

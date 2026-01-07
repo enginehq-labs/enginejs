@@ -12,7 +12,7 @@ An EngineJS app is a folder with:
     - required: `dsl.json` (snapshot model for safe sync)
     - required when workflows enabled: `workflow_events_outbox.json`
 - `workflow/*.ts` — workflow specs (file-based registry; optional when using DB registry)
-- `pipeline/*.ts` — pipeline specs (file-based registry; preferred term: “pipeline”)
+- `pipeline/*.ts` — pipeline functions (custom ops + field validators + transforms)
 - `routes/*.ts` — custom HTTP endpoints (customer endpoints, etc.)
 - `enginejs.config.ts` — app config (TypeScript)
 - `package.json` — depends on `enginehq`
@@ -43,12 +43,19 @@ Optional override (advanced only):
 
 ### Pipelines
 
-Each file in `pipeline/` must export one of:
+Pipeline specs are declared inside each model DSL (`dsl/models/*.json`) via a `pipelines` key.
 
-- default export: `{ [modelKey: string]: unknown }` (pipeline spec per model key)
-- named export `pipelines`: `{ [modelKey: string]: unknown }`
+Each file in `pipeline/` MAY also export:
 
-Each pipeline spec is registered into the engine’s `pipelines` registry.
+- `validators`: `{ [name: string]: (ctx, args) => unknown }`
+- `transforms`: `{ [name: string]: (ctx, args) => unknown }`
+- `ops`: `{ [name: string]: (ctx, args) => unknown }` (custom pipeline ops)
+
+These are registered into the engine service registry as:
+
+- `pipelines.validator.<name>`
+- `pipelines.transform.<name>`
+- `pipelines.custom.<name>`
 
 ### Workflows
 
@@ -57,7 +64,10 @@ Each file in `workflow/` must export a workflow spec:
 - default export: `{ name: string, triggers: [...], steps: [...] }`
 - named export `workflow`: same shape
 
-The workflow is registered into the engine’s `workflows` registry by `name`.
+The workflow is registered into the engine’s `workflows` registry by:
+
+- `slug` when present, otherwise
+- `name`
 
 #### DB-backed workflows (recommended for UI editing)
 
@@ -66,6 +76,8 @@ Apps may instead store workflows in the DB (so non-dev operators can edit workfl
 - Define `dsl/meta/workflow.json` (see `specs/08-workflows-outbox.md`)
 - Set `engine.workflows.registry="db"` in `enginejs.config.ts`
 - Use `enginehq workflows sync` to seed DB workflows from `workflow/` during development
+
+When using DB-backed workflows, the `workflow` model is managed via generic CRUD (`/api/workflow`) using the model’s ACL/RLS, and create/update/delete MUST update the in-memory registry without restarting the process.
 
 ### Routes
 
