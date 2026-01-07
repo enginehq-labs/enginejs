@@ -433,7 +433,7 @@ function getPipelineRegistry(req: Request): any | null {
 }
 
 function workflowsEnabled(config: EngineConfig): boolean {
-  return !!config.workflows;
+  return !!config.workflows && (config.workflows as any).enabled !== false;
 }
 
 function getWorkflowEngine(orm: OrmInitResult): WorkflowEngine | null {

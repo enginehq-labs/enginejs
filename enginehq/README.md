@@ -22,6 +22,12 @@ npx enginehq sync
 npm run dev
 ```
 
+Seed DB-backed workflows (optional; for future UI editing):
+
+```sh
+npx enginehq workflows sync
+```
+
 ## Usage
 
 ```ts

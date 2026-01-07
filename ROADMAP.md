@@ -8,11 +8,16 @@ EngineJS is currently a **Technical Preview**. This roadmap is intentionally sho
   - DSL registry + ORM init + safe sync
   - ACL/RLS (incl. `via` join scoping)
   - pipelines + workflows/outbox runner/scheduler/replayer/retention
-- Improve docs and examples (non–pf-backend-specific).
+- DB-backed workflow definitions (`workflow` meta model) + CLI seeding (`enginehq workflows sync`) so workflows can be UI-editable later.
+- Improve docs and examples.
 - Expand `CrudService` parity (read/update/delete, includeDepth, find, junction behaviors) and reduce duplication between core and HTTP.
 
 ## 0.2.x
 
+- Workflow management ergonomics:
+  - admin endpoints (list/create/update/enable/disable)
+  - validation error surfaces suitable for a UI editor
+  - import/export + basic audit/versioning strategy
 - Express-first auth helpers:
   - optional DB-backed sessions (`auth_session`) with refresh rotation + revocation
   - middleware + ergonomic `resolveActor` helpers
@@ -30,5 +35,4 @@ EngineJS is currently a **Technical Preview**. This roadmap is intentionally sho
 ## 1.0.0
 
 - Versioned, documented public API stability guarantees.
-- Compatibility/migration guides for selected reference apps (including `pf-backend` as a separate guide after EngineJS is stable).
-
+- Compatibility/migration guides for selected reference apps.

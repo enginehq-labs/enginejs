@@ -1,0 +1,13 @@
+{
+  "workflow": {
+    "fields": {
+      "id": { "type": "int", "primary": true, "autoIncrement": true },
+      "name": { "type": "string", "required": true },
+      "enabled": { "type": "boolean", "default": true },
+      "spec": { "type": "jsonb" }
+    },
+    "indexes": { "unique": [["name"]], "many": [], "lower": [] },
+    "access": {}
+  }
+}
+

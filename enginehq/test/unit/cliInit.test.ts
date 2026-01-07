@@ -26,6 +26,8 @@ test('enginehq initEngineJsApp scaffolds required folders/files', () => {
     'enginejs.config.ts',
     'package.json',
     'dsl/meta/dsl.json',
+    'dsl/meta/workflow_events_outbox.json',
+    'dsl/meta/workflow.json',
   ]) {
     assert.ok(fs.existsSync(path.join(appDir, p)), `missing ${p}`);
   }

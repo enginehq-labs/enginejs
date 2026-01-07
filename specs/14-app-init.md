@@ -11,7 +11,7 @@ An EngineJS app is a folder with:
   - `dsl/meta/*.json` — system/meta models
     - required: `dsl.json` (snapshot model for safe sync)
     - required when workflows enabled: `workflow_events_outbox.json`
-- `workflow/*.ts` — workflow specs (file-based registry)
+- `workflow/*.ts` — workflow specs (file-based registry; optional when using DB registry)
 - `pipeline/*.ts` — pipeline specs (file-based registry; preferred term: “pipeline”)
 - `routes/*.ts` — custom HTTP endpoints (customer endpoints, etc.)
 - `enginejs.config.ts` — app config (TypeScript)
@@ -59,6 +59,14 @@ Each file in `workflow/` must export a workflow spec:
 
 The workflow is registered into the engine’s `workflows` registry by `name`.
 
+#### DB-backed workflows (recommended for UI editing)
+
+Apps may instead store workflows in the DB (so non-dev operators can edit workflows later):
+
+- Define `dsl/meta/workflow.json` (see `specs/08-workflows-outbox.md`)
+- Set `engine.workflows.registry="db"` in `enginejs.config.ts`
+- Use `enginehq workflows sync` to seed DB workflows from `workflow/` during development
+
 ### Routes
 
 Each file in `routes/` must export:
@@ -85,5 +93,6 @@ The unscoped `enginehq` package must ship a CLI binary:
 
 - `enginehq init <dir>` — creates the app folder structure and starter files
 - `enginehq sync` — runs safe sync (creates missing tables, widening-only alters, writes DSL snapshot)
+- `enginehq workflows sync` — imports workflow specs from `workflow/` into the DB `workflow` table
 - `enginehq start` — runs the app in the current working directory
 - `enginehq dev` — alias of `start` for now (watch mode may come later)

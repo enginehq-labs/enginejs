@@ -13,6 +13,7 @@ function usage(code = 0): never {
   const msg = `Usage:
   enginehq init <dir> [--force]
   enginehq sync [--dry-run] [--requireSnapshot] [--allowNoSnapshot]
+  enginehq workflows sync [--overwrite]
   enginehq start
   enginehq dev
 
@@ -181,6 +182,23 @@ export default {
     force,
   );
 
+  writeJsonIfMissing(
+    path.join(targetDir, 'dsl', 'meta', 'workflow.json'),
+    {
+      workflow: {
+        fields: {
+          id: { type: 'int', primary: true, autoIncrement: true },
+          name: { type: 'string', required: true },
+          enabled: { type: 'boolean', default: true },
+          spec: { type: 'jsonb' },
+        },
+        indexes: { unique: [['name']], many: [], lower: [] },
+        access: {},
+      },
+    },
+    force,
+  );
+
   writeFileIfMissing(
     path.join(targetDir, 'pipeline', 'customer.pipeline.ts'),
     `export default {
@@ -233,10 +251,27 @@ function runtimePath() {
   return fileURLToPath(new URL('./runtime/app.js', import.meta.url));
 }
 
+function runtimeWorkflowsSyncPath() {
+  // dist/cli.js -> dist/runtime/workflowsSync.js
+  return fileURLToPath(new URL('./runtime/workflowsSync.js', import.meta.url));
+}
+
 function spawnStart({ cwd }: { cwd: string }) {
   const node = process.execPath;
   const rt = runtimePath();
   const child = spawn(node, ['--loader', 'tsx', rt], {
+    cwd,
+    stdio: 'inherit',
+    env: process.env,
+  });
+  child.on('exit', (code) => process.exit(code ?? 0));
+}
+
+function spawnWorkflowsSync({ cwd, overwrite }: { cwd: string; overwrite: boolean }) {
+  const node = process.execPath;
+  const rt = runtimeWorkflowsSyncPath();
+  const args = ['--loader', 'tsx', rt, ...(overwrite ? ['--overwrite'] : [])];
+  const child = spawn(node, args, {
     cwd,
     stdio: 'inherit',
     env: process.env,
@@ -286,6 +321,15 @@ export async function runCli(argv = process.argv): Promise<void> {
       allowNoSnapshot: flags.has('--allowNoSnapshot') ? true : !requireSnapshot,
     });
     return;
+  }
+
+  if (cmd === 'workflows') {
+    const sub = positionals[0] || '';
+    if (sub === 'sync') {
+      spawnWorkflowsSync({ cwd: process.cwd(), overwrite: flags.has('--overwrite') });
+      return;
+    }
+    usage(1);
   }
 
   if (cmd === 'start' || cmd === 'dev') {

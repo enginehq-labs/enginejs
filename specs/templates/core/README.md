@@ -24,7 +24,8 @@ const engine = createEngine({
   auth: { jwt: { accessSecret: 'dev', accessTtl: '1h' } },
   acl: {},
   rls: { subjects: {}, policies: {} },
-  workflows: { enabled: true },
+  // For future UI editing, prefer DB-backed workflows:
+  workflows: { enabled: true, registry: 'db' }, // 'fs' | 'db'
 });
 
 await engine.init();

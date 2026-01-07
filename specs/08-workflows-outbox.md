@@ -68,6 +68,33 @@ Workflows MUST support:
 
 Workflows are registered by name into the `workflows` registry.
 
+## Workflow storage (DB-ready)
+
+EngineJS MUST support DB-backed workflow definitions so non-dev operators can edit workflows later via UI.
+
+### Storage model: `workflow` (meta)
+
+When using DB-backed workflows, apps SHOULD define a meta model with key `workflow` (in `dsl/meta/workflow.json`) with at least:
+
+- `name` (string)
+- `enabled` (boolean, default true)
+- `spec` (jsonb) — the workflow spec payload (triggers/steps/actor mode/retry)
+- `indexes.unique = [["name"]]` (unique name)
+
+### Registry modes
+
+`engine.workflows.registry` controls the source:
+
+- `fs` (default): workflows are loaded from `workflow/*.ts|js|mjs` and registered in-memory.
+- `db`: workflows are loaded from the `workflow` table and registered in-memory at runtime init.
+
+When `registry=db`, the workflow files directory becomes a developer authoring surface only (seed/export/import), not the runtime source of truth.
+
+### Validation policy
+
+- When loading DB workflows, EngineJS MUST validate that each `spec` has `triggers[]` and `steps[]`.
+- Invalid specs SHOULD be skipped with a log warning by default; when `engine.workflows.strict=true`, invalid specs MUST fail startup.
+
 Minimum supported workflow fields:
 
 - `triggers`: array of trigger objects

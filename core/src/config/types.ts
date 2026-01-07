@@ -1,6 +1,13 @@
 import type { RlsConfig } from '../rls/types.js';
 import type { Migration } from '../migrations/types.js';
 
+export type WorkflowsConfig = {
+  enabled?: boolean;
+  registry?: 'fs' | 'db';
+  strict?: boolean;
+  db?: { modelKey?: string };
+};
+
 export type EngineConfig = {
   app: { name: string; env: 'development' | 'test' | 'staging' | 'production' };
   http?: { basePath?: string; trustProxy?: boolean; hideExistence?: boolean };
@@ -19,7 +26,7 @@ export type EngineConfig = {
   acl: { rolesModel?: string; roleNameField?: string };
   rls: RlsConfig;
   migrations?: { tableName?: string; migrations: Migration[] };
-  workflows?: Record<string, unknown>;
+  workflows?: WorkflowsConfig;
   services?: Record<string, unknown>;
   compat?: Record<string, boolean>;
 };

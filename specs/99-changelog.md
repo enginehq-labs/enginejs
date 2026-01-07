@@ -2,6 +2,7 @@
 
 ## Changelog (recent)
 
+- 2026-01-07: Added DB-backed workflow registry mode (`engine.workflows.registry="db"`) with `workflow` meta model and CLI seeding (`enginehq workflows sync`) for future UI editing.
 - 2026-01-06: Made safe sync mandatory by requiring `dsl` snapshot meta model; added `enginehq sync` and scaffolded `dsl/meta/dsl.json`.
 - 2026-01-06: Default DSL schema is now versioned and shipped with EngineJS; apps no longer vendor `dsl/schema.json` by default.
 - 2026-01-06: Bumped packages to `0.1.2` and updated root Quickstart to use `enginehq` CLI.

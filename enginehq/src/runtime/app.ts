@@ -26,7 +26,9 @@ export async function startEngineJsApp(cwd = process.cwd()): Promise<void> {
 
   const autoload = cfg.autoload ?? {};
   await autoloadPipelines({ cwd, pipelinesDir: autoload.pipelinesDir ?? 'pipeline', registry: pipelines as any });
-  await autoloadWorkflows({ cwd, workflowsDir: autoload.workflowsDir ?? 'workflow', registry: workflows as any });
+  if ((cfg.engine.workflows as any)?.registry !== 'db') {
+    await autoloadWorkflows({ cwd, workflowsDir: autoload.workflowsDir ?? 'workflow', registry: workflows as any });
+  }
 
   const app = createEngineExpressApp(engine, {
     defaultActor,

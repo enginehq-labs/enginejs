@@ -30,7 +30,15 @@ Create a new EngineJS app:
 npx enginehq init my-app
 cd my-app
 npm i
+npx enginehq sync
 npm run dev
+```
+
+Optional: DB-backed workflows (recommended for future UI editing):
+
+```sh
+# enginejs.config.ts -> engine.workflows.registry = "db"
+npx enginehq workflows sync
 ```
 
 ## Roadmap

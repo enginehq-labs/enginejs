@@ -8,3 +8,4 @@ export * from './schedulerStore.js';
 export * from './scheduler.js';
 export * from './replayer.js';
 export * from './maintenance.js';
+export * from './registryDb.js';

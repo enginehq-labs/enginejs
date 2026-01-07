@@ -24,6 +24,7 @@ import { WorkflowReplayer } from '../workflows/replayer.js';
 import { MigrationRunner } from '../migrations/runner.js';
 import { WorkflowOutboxMaintenance } from '../workflows/maintenance.js';
 import { CrudService } from '../crud/service.js';
+import { normalizeWorkflowsConfig, SequelizeWorkflowRegistryLoader } from '../workflows/registryDb.js';
 
 function getModelSpecFromDsl(dsl: unknown, modelKey: string): DslModelSpec | null {
   if (!dsl || typeof dsl !== 'object') return null;
@@ -46,6 +47,7 @@ export function createEngine(config: EngineConfig): EngineRuntime {
   const plugins: EnginePlugin[] = [];
   const pipelines = new DefaultPipelineRegistry();
   const workflows = new DefaultWorkflowRegistry();
+  const wfCfg = normalizeWorkflowsConfig(config.workflows as any);
 
   let compiled: CompiledDsl | null = null;
   let orm: OrmInitResult | null = null;
@@ -132,6 +134,22 @@ export function createEngine(config: EngineConfig): EngineRuntime {
     return new WorkflowOutboxMaintenance({ outboxModel, logger });
   });
   services.register('crudService', 'singleton', () => new CrudService({ services }));
+  if (wfCfg.enabled && wfCfg.registry === 'db') {
+    services.register('workflowRegistryLoader', 'singleton', () => {
+      if (!orm) throw new Error('Workflow registry loader requires ORM (call engine.init())');
+      const workflowModel = (orm.models as any)[wfCfg.db.modelKey];
+      if (!workflowModel) {
+        throw new Error(`Missing required meta model: ${wfCfg.db.modelKey} (create dsl/meta/${wfCfg.db.modelKey}.json)`);
+      }
+      const logger = services.resolve<any>('logger', { scope: 'singleton' });
+      return new SequelizeWorkflowRegistryLoader({
+        workflowModel,
+        registry: workflows,
+        logger,
+        strict: wfCfg.strict,
+      });
+    });
+  }
 
   function registerPlugin(plugin: EnginePlugin) {
     plugins.push(plugin);
@@ -175,6 +193,11 @@ export function createEngine(config: EngineConfig): EngineRuntime {
     orm = initSequelizeModelsFromDsl(sequelize, compiled.dsl);
     runtime.dsl = compiled.dsl as DslRoot;
     runtime.orm = orm;
+
+    if (wfCfg.enabled && wfCfg.registry === 'db') {
+      const loader = services.resolve<any>('workflowRegistryLoader', { scope: 'singleton' });
+      await loader.loadFromDb();
+    }
 
     for (const plugin of plugins) plugin.onDslLoaded?.(compiled.dsl, runtime);
     for (const plugin of plugins) plugin.onModelsReady?.(runtime);
