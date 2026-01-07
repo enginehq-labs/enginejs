@@ -164,6 +164,24 @@ test('docker postgres: workflow db.update is blocked by RLS for inherit actor', 
     ),
   );
 
+  fs.writeFileSync(
+    path.join(metaDir, 'dsl.json'),
+    JSON.stringify(
+      {
+        dsl: {
+          fields: {
+            id: { type: 'int', primary: true, autoIncrement: true },
+            hash: { type: 'string', length: 255 },
+            dsl: { type: 'jsonb' },
+          },
+          access: { read: [], create: [], update: [], delete: [] },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
   const engine = createEngine({
     app: { name: 'enginejs-wf-rls1', env: 'test' },
     db: { url: `postgres://postgres:${password}@127.0.0.1:${port}/${dbName}`, dialect: 'postgres' },
@@ -299,6 +317,24 @@ test('docker postgres: workflow db.update bypasses ACL/RLS for system actor', as
             status: { type: 'string' },
             attempts: { type: 'int' },
             next_run_at: { type: 'datetime' },
+          },
+          access: { read: [], create: [], update: [], delete: [] },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  fs.writeFileSync(
+    path.join(metaDir, 'dsl.json'),
+    JSON.stringify(
+      {
+        dsl: {
+          fields: {
+            id: { type: 'int', primary: true, autoIncrement: true },
+            hash: { type: 'string', length: 255 },
+            dsl: { type: 'jsonb' },
           },
           access: { read: [], create: [], update: [], delete: [] },
         },

@@ -8,7 +8,9 @@ An EngineJS app is a folder with:
 
 - `dsl/`
   - `dsl/models/*.json` — app models
-  - `dsl/meta/*.json` — system/meta models (at minimum `workflow_events_outbox` when workflows are enabled)
+  - `dsl/meta/*.json` — system/meta models
+    - required: `dsl.json` (snapshot model for safe sync)
+    - required when workflows enabled: `workflow_events_outbox.json`
 - `workflow/*.ts` — workflow specs (file-based registry)
 - `pipeline/*.ts` — pipeline specs (file-based registry; preferred term: “pipeline”)
 - `routes/*.ts` — custom HTTP endpoints (customer endpoints, etc.)
@@ -82,5 +84,6 @@ This allows `enginejs.config.ts` (and route/workflow/pipeline TS files) to be lo
 The unscoped `enginehq` package must ship a CLI binary:
 
 - `enginehq init <dir>` — creates the app folder structure and starter files
+- `enginehq sync` — runs safe sync (creates missing tables, widening-only alters, writes DSL snapshot)
 - `enginehq start` — runs the app in the current working directory
 - `enginehq dev` — alias of `start` for now (watch mode may come later)

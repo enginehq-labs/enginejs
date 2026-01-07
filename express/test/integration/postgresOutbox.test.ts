@@ -167,6 +167,24 @@ test('docker postgres: create -> pipeline -> outbox row inserted', async (t) => 
     ),
   );
 
+  fs.writeFileSync(
+    path.join(metaDir, 'dsl.json'),
+    JSON.stringify(
+      {
+        dsl: {
+          fields: {
+            id: { type: 'int', primary: true, autoIncrement: true },
+            hash: { type: 'string', length: 255 },
+            dsl: { type: 'jsonb' },
+          },
+          access: { read: [], create: [], update: [], delete: [] },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
   const dbUrl = `postgres://postgres:${password}@127.0.0.1:${port}/${dbName}`;
   const engine = createEngine({
     app: { name: 'enginejs-it', env: 'test' },
@@ -277,6 +295,24 @@ test('docker postgres: workflowRunner processes outbox and runs db.update step',
             status: { type: 'string' },
             attempts: { type: 'int' },
             next_run_at: { type: 'datetime' },
+          },
+          access: { read: [], create: [], update: [], delete: [] },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  fs.writeFileSync(
+    path.join(metaDir, 'dsl.json'),
+    JSON.stringify(
+      {
+        dsl: {
+          fields: {
+            id: { type: 'int', primary: true, autoIncrement: true },
+            hash: { type: 'string', length: 255 },
+            dsl: { type: 'jsonb' },
           },
           access: { read: [], create: [], update: [], delete: [] },
         },
@@ -434,6 +470,24 @@ test('docker postgres: scheduler emits interval/datetime, runner actor modes, re
           fields: {
             key: { type: 'string', primary: true, length: 255 },
             value: { type: 'string' },
+          },
+          access: { read: [], create: [], update: [], delete: [] },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  fs.writeFileSync(
+    path.join(metaDir, 'dsl.json'),
+    JSON.stringify(
+      {
+        dsl: {
+          fields: {
+            id: { type: 'int', primary: true, autoIncrement: true },
+            hash: { type: 'string', length: 255 },
+            dsl: { type: 'jsonb' },
           },
           access: { read: [], create: [], update: [], delete: [] },
         },

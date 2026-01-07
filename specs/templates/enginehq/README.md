@@ -18,6 +18,7 @@ Create a new EngineJS app:
 npx enginehq init my-app
 cd my-app
 npm i
+npx enginehq sync
 npm run dev
 ```
 

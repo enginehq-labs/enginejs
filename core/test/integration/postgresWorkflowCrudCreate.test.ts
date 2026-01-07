@@ -168,6 +168,24 @@ test('docker postgres: workflow can run crud.create step (no HTTP) to create a r
     ),
   );
 
+  fs.writeFileSync(
+    path.join(metaDir, 'dsl.json'),
+    JSON.stringify(
+      {
+        dsl: {
+          fields: {
+            id: { type: 'int', primary: true, autoIncrement: true },
+            hash: { type: 'string', length: 255 },
+            dsl: { type: 'jsonb' },
+          },
+          access: { read: [], create: [], update: [], delete: [] },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
   const engine = createEngine({
     app: { name: 'enginejs-wf-crud-create', env: 'test' },
     db: { url: `postgres://postgres:${password}@127.0.0.1:${port}/${dbName}`, dialect: 'postgres' },

@@ -264,9 +264,12 @@ export async function safeSync(opts: SafeSyncOptions): Promise<SafeSyncReport> {
     autoNameRecomputed: [],
   };
 
-  // Snapshot-based narrowing checks (optional).
+  // Snapshot-based narrowing checks (mandatory: snapshot model required).
   const snapshotModel = (models as any)[snapshotModelKey] as ModelStatic<Model> | undefined;
   let prevSnapshotDsl: DslRoot | null = null;
+  if (!snapshotModel) {
+    throw new SafeSyncSnapshotRequiredError(`SafeSync requires a DSL snapshot model: ${snapshotModelKey}`);
+  }
   if (snapshotModel) {
     const tn = (snapshotModel as any).getTableName?.() ?? snapshotModelKey;
     const table = typeof tn === 'string' ? tn : (tn as any).tableName;
@@ -279,8 +282,6 @@ export async function safeSync(opts: SafeSyncOptions): Promise<SafeSyncReport> {
     } else if (!allowNoSnapshot || requireSnapshot) {
       throw new SafeSyncSnapshotRequiredError('SafeSync requires an existing DSL snapshot table');
     }
-  } else if (!allowNoSnapshot || requireSnapshot) {
-    throw new SafeSyncSnapshotRequiredError('SafeSync requires a DSL snapshot model');
   }
   if (prevSnapshotDsl) assertNoNarrowing(prevSnapshotDsl, opts.dsl);
 

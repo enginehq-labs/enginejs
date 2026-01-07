@@ -4,11 +4,15 @@ import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 
+import { createEngine, safeSync } from '@enginehq/core';
+import { loadEngineJsConfig } from './runtime/config.js';
+
 const PKG_NAME = 'enginehq';
 
 function usage(code = 0): never {
   const msg = `Usage:
   enginehq init <dir> [--force]
+  enginehq sync [--dry-run] [--requireSnapshot] [--allowNoSnapshot]
   enginehq start
   enginehq dev
 
@@ -138,6 +142,21 @@ export default {
   );
 
   writeJsonIfMissing(
+    path.join(targetDir, 'dsl', 'meta', 'dsl.json'),
+    {
+      dsl: {
+        fields: {
+          id: { type: 'int', primary: true, autoIncrement: true },
+          hash: { type: 'string', length: 255 },
+          dsl: { type: 'jsonb' },
+        },
+        access: { read: [], create: [], update: [], delete: [] },
+      },
+    },
+    force,
+  );
+
+  writeJsonIfMissing(
     path.join(targetDir, 'dsl', 'meta', 'workflow_events_outbox.json'),
     {
       workflow_events_outbox: {
@@ -225,7 +244,23 @@ function spawnStart({ cwd }: { cwd: string }) {
   child.on('exit', (code) => process.exit(code ?? 0));
 }
 
-export function runCli(argv = process.argv): void {
+async function runSync({ cwd, dryRun, requireSnapshot, allowNoSnapshot }: { cwd: string; dryRun: boolean; requireSnapshot: boolean; allowNoSnapshot: boolean }) {
+  const cfg = await loadEngineJsConfig(cwd);
+  const engine = createEngine(cfg.engine);
+  await engine.init();
+
+  const sequelize = engine.services.resolve<any>('db', { scope: 'singleton' });
+  const report = await safeSync({
+    sequelize,
+    orm: engine.orm!,
+    dsl: engine.dsl! as any,
+    dryRun,
+    snapshot: { modelKey: 'dsl', requireSnapshot, allowNoSnapshot },
+  });
+  process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+}
+
+export async function runCli(argv = process.argv): Promise<void> {
   const { cmd, flags, positionals } = parseArgs(argv);
   if (!cmd || cmd === '--help' || cmd === '-h' || cmd === 'help') usage(0);
 
@@ -239,6 +274,17 @@ export function runCli(argv = process.argv): void {
     if (!dir) usage(1);
     initEngineJsApp({ dir, force: flags.has('--force') });
     process.stdout.write(`Initialized EngineJS app in ${path.resolve(dir)}\n`);
+    return;
+  }
+
+  if (cmd === 'sync') {
+    const requireSnapshot = flags.has('--requireSnapshot');
+    await runSync({
+      cwd: process.cwd(),
+      dryRun: flags.has('--dry-run'),
+      requireSnapshot,
+      allowNoSnapshot: flags.has('--allowNoSnapshot') ? true : !requireSnapshot,
+    });
     return;
   }
 

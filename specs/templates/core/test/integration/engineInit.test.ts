@@ -29,6 +29,24 @@ test('createEngine: registers built-in registries and runs plugin hooks', async 
     ),
   );
 
+  fs.writeFileSync(
+    path.join(metaDir, 'dsl.json'),
+    JSON.stringify(
+      {
+        dsl: {
+          fields: {
+            id: { type: 'int', primary: true, autoIncrement: true },
+            hash: { type: 'string', length: 255 },
+            dsl: { type: 'jsonb' },
+          },
+          access: { read: [], create: [], update: [], delete: [] },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
   const engine = createEngine({
     app: { name: 't', env: 'test' },
     db: { url: 'postgres://example.invalid/db' },

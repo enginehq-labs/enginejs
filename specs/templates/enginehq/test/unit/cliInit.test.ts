@@ -25,6 +25,7 @@ test('enginehq initEngineJsApp scaffolds required folders/files', () => {
     'routes',
     'enginejs.config.ts',
     'package.json',
+    'dsl/meta/dsl.json',
   ]) {
     assert.ok(fs.existsSync(path.join(appDir, p)), `missing ${p}`);
   }

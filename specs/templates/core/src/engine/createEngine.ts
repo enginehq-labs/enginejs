@@ -166,6 +166,10 @@ export function createEngine(config: EngineConfig): EngineRuntime {
       config.dsl.schema ?? config.dsl.schemaPath ?? ENGINEJS_DEFAULT_DSL_SCHEMA,
     );
 
+    if (!(compiled.dsl as any).dsl) {
+      throw new Error('Missing required meta model: dsl (create dsl/meta/dsl.json)');
+    }
+
     const dialect = config.db.dialect || 'postgres';
     sequelize = new Sequelize(config.db.url, { logging: false, dialect: dialect as any });
     orm = initSequelizeModelsFromDsl(sequelize, compiled.dsl);

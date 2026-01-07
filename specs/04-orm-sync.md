@@ -35,7 +35,7 @@ Snapshot rules:
 
 ## DSL snapshot (meta model)
 
-When present, a DSL snapshot model MUST be named `dsl` and store the last compiled DSL used for safe sync comparisons.
+EngineJS requires a DSL snapshot meta model named `dsl` to store the last compiled DSL used for safe sync comparisons.
 
 Minimum schema (suggested):
 
@@ -46,8 +46,8 @@ Minimum schema (suggested):
 
 Rules:
 
-- Safe sync MUST still function without the snapshot model, but narrowing detection and auto-name backfill are skipped.
-- When snapshot model is present, safe sync MUST write a new row after a successful run.
+- Safe sync MUST fail fast if the snapshot model is missing (sync is mandatory).
+- Safe sync MUST write a new snapshot row after a successful run.
 
 ## Visible index
 
