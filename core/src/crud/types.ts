@@ -21,17 +21,18 @@ export type CrudCallOptions = {
 
 export type CrudListResult = {
   rows: Array<Record<string, unknown>>;
-  pagination: {
-    limit: number;
-    totalCount: number;
-    totalPages: number;
-    currentPage: number;
-    nextPage: number | null;
-    previousPage: number | null;
-  };
+  pagination:
+    | {
+        limit: number;
+        totalCount: number;
+        totalPages: number;
+        currentPage: number;
+        nextPage: number | null;
+        previousPage: number | null;
+      }
+    | null;
 };
 
 export type CrudCtx = {
   actor: Actor;
 };
-

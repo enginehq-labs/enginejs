@@ -168,9 +168,13 @@ export function parseListQuery(
   const defaultPage = opts.defaultPage ?? 1;
   const page = Math.max(1, parseIntSafe(query.page) ?? defaultPage);
 
-  const defaultLimit = opts.defaultLimit ?? 25;
-  const maxLimit = opts.maxLimit ?? 250;
-  const limit = Math.max(1, Math.min(maxLimit, parseIntSafe(query.limit) ?? defaultLimit));
+  const defaultLimit = opts.defaultLimit ?? 50;
+  const maxLimit = opts.maxLimit ?? 200;
+  const limitRaw = parseIntSafe(query.limit);
+  const limit =
+    limitRaw === 0
+      ? 0
+      : Math.max(1, Math.min(maxLimit, limitRaw ?? defaultLimit));
 
   const sort = parseSort(query.sort);
   const filters = parseFilters(query.filters);

@@ -67,3 +67,8 @@ test('parseListQuery: parses include flags, includeDepth, page/limit, filters/so
   ]);
 });
 
+test('parseListQuery: limit=0 returns limit 0 (no pagination use)', () => {
+  const q = parseListQuery({ limit: '0' });
+  assert.equal(q.limit, 0);
+  assert.equal(q.page, 1);
+});

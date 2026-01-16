@@ -5,7 +5,7 @@ import { Sequelize } from 'sequelize';
 
 import { initSequelizeModelsFromDsl } from '../../src/orm/sequelizeAdapter.js';
 
-test('initSequelizeModelsFromDsl: defines models and scalar belongsTo/hasMany associations', () => {
+test('initSequelizeModelsFromDsl: defines models and scalar belongsTo association', () => {
   const sequelize = new Sequelize('postgres://user:pass@localhost:5432/db', { logging: false });
   const { models } = initSequelizeModelsFromDsl(sequelize, {
     role: {
@@ -27,7 +27,6 @@ test('initSequelizeModelsFromDsl: defines models and scalar belongsTo/hasMany as
 
   // Association aliases
   assert.ok((models.customer as any).associations?.role, 'customer.belongsTo(role) missing');
-  assert.ok((models.role as any).associations?.customer, 'role.hasMany(customer) missing');
 
   // Column mapping preserved
   const attr = (models.customer as any).rawAttributes.role_id;

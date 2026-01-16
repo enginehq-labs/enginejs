@@ -3,6 +3,10 @@ import { assertWorkflowSpecOrThrow } from '../workflows/validate.js';
 import type { PipelineAction, PipelineCtx, PipelineModelSpec, PipelineOp, PipelinePhase, PipelineResult } from './types.js';
 import { PipelineNotImplementedError, PipelineValidationError } from './errors.js';
 
+const RESTRICT_UNKNOWN_FIELDS = String(process.env.restrict_unknown_fields ?? '').trim() !== '0';
+const NUMERICISH_TYPES = new Set(['int', 'integer', 'bigint', 'float', 'decimal', 'number']);
+const DATETIMEISH_TYPES = new Set(['date', 'datetime']);
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
 }
@@ -36,6 +40,48 @@ function applyLowercase(obj: Record<string, unknown>, fields: string[]) {
     const v = obj[f];
     if (typeof v === 'string') obj[f] = v.toLowerCase();
   }
+}
+
+function pruneUnknownFields({
+  current,
+  modelSpec,
+}: {
+  current: Record<string, unknown>;
+  modelSpec: DslModelSpec;
+}) {
+  if (!RESTRICT_UNKNOWN_FIELDS) return current;
+  const allowed = new Set(Object.keys(modelSpec.fields || {}));
+  if (!allowed.size) return current;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(current)) {
+    if (allowed.has(k)) out[k] = v;
+  }
+  return out;
+}
+
+function coerceEmptyToNull({
+  current,
+  modelSpec,
+  targeted,
+}: {
+  current: Record<string, unknown>;
+  modelSpec: DslModelSpec;
+  targeted: string[];
+}) {
+  const out: Record<string, unknown> = { ...current };
+  for (const [field, spec] of Object.entries(modelSpec.fields || {})) {
+    if (targeted.length && !targeted.includes(field)) continue;
+    const type = String((spec as any)?.type || '').toLowerCase();
+    const isNumeric = NUMERICISH_TYPES.has(type);
+    const isDatetime = DATETIMEISH_TYPES.has(type);
+    const isBool = type === 'boolean';
+    if (!isNumeric && !isDatetime && !isBool) continue;
+    const val = out[field];
+    if (val === '' || (typeof val === 'string' && val.trim() === '')) {
+      if (Object.prototype.hasOwnProperty.call(out, field)) out[field] = null;
+    }
+  }
+  return out;
 }
 
 function pickFieldsForOp(op: { field?: string; fields?: string[] }): string[] {
@@ -199,25 +245,43 @@ export class PipelineEngine {
 
     for (const op of ops) {
       const name = String((op as any).op || '');
-      if (name === 'trim') applyTrim(current, pickFieldsForOp(op as any));
-      else if (name === 'lowercase') applyLowercase(current, pickFieldsForOp(op as any));
-      else if (name === 'defaults') {
+      const opName = name.toLowerCase();
+      if (opName === 'trim') applyTrim(current, pickFieldsForOp(op as any));
+      else if (opName === 'lowercase') applyLowercase(current, pickFieldsForOp(op as any));
+      else if (opName === 'defaults') {
         const vals = (op as any).values;
         if (vals && typeof vals === 'object') {
           for (const [k, v] of Object.entries(vals as any)) if (current[k] === undefined) current[k] = v;
         }
-      } else if (name === 'set') {
+      } else if (opName === 'set') {
         current[String((op as any).field)] = (op as any).value;
-      } else if (name === 'remove') {
+      } else if (opName === 'remove') {
         for (const f of (op as any).fields || []) delete current[String(f)];
-      } else if (name === 'redact') {
+      } else if (opName === 'redact') {
         const val = (op as any).value ?? null;
         for (const f of (op as any).fields || []) current[String(f)] = val;
-      } else if (name === 'fieldBasedTransform') {
+      } else if (
+        opName === 'prune_unknown_fields' ||
+        opName === 'pruneunknownfields' ||
+        opName === 'dropunknownfields' ||
+        opName === 'drop_unknown_fields' ||
+        opName === 'stripunknownfields' ||
+        opName === 'strip_unknown_fields'
+      ) {
+        current = pruneUnknownFields({ current, modelSpec: ctx.modelSpec });
+      } else if (
+        opName === 'coalesce_empty_to_null' ||
+        opName === 'coerce_empty_to_null' ||
+        opName === 'empty_to_null' ||
+        opName === 'nullify_empty'
+      ) {
+        const targeted = pickFieldsForOp(op as any);
+        current = coerceEmptyToNull({ current, modelSpec: ctx.modelSpec, targeted });
+      } else if (opName === 'fieldbasedtransform') {
         current = runFieldBasedTransforms({ ...ctx, input: current }).output;
-      } else if (name === 'fieldBasedValidator') {
+      } else if (opName === 'fieldbasedvalidator') {
         runFieldBasedValidators({ ...ctx, input: current });
-      } else if (name === 'custom') {
+      } else if (opName === 'custom') {
         runCustomOp({ ...ctx, input: current }, op as any);
       } else {
         throw new PipelineNotImplementedError(`Unknown pipeline op: ${name}`);

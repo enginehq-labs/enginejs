@@ -84,6 +84,258 @@ function isJunctionIntFkField(f: DslFieldSpec | undefined): boolean {
   return multi && (type === 'int' || type === 'integer' || type === 'bigint') && !!source && !!sourceid;
 }
 
+const RESTRICT_UNKNOWN_FIELDS = String(process.env.restrict_unknown_fields ?? '').trim() !== '0';
+
+function pruneUnknownPayload(spec: DslModelSpec, payload: Record<string, unknown>): Record<string, unknown> {
+  if (!RESTRICT_UNKNOWN_FIELDS) return { ...payload };
+  const allowed = new Set(Object.keys(spec.fields || {}));
+  if (!allowed.size) return { ...payload };
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(payload)) {
+    if (allowed.has(k)) out[k] = v;
+  }
+  return out;
+}
+
+function parseArrayish(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (raw == null) return [];
+  if (typeof raw === 'string') {
+    const s = raw.trim();
+    if (!s) return [];
+    if (s.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return s.split(',').map((x) => x.trim()).filter(Boolean);
+  }
+  return [raw];
+}
+
+function normalizePayloadMultiFields(spec: DslModelSpec, payload: Record<string, unknown>): {
+  body: Record<string, unknown>;
+  joinPayloads: Record<string, Array<number>>;
+} {
+  const body: Record<string, unknown> = { ...payload };
+  const joinPayloads: Record<string, Array<number>> = {};
+
+  for (const [field, f] of Object.entries(spec.fields || {})) {
+    if (!f || typeof f !== 'object') continue;
+    const rawVal = body[field];
+    if (rawVal === undefined) continue;
+
+    if (isStringArrayField(f as any)) {
+      const arr = parseArrayish(rawVal).map((v) => String(v));
+      body[field] = arr;
+      continue;
+    }
+
+    if (isJunctionIntFkField(f as any)) {
+      const arr = parseArrayish(rawVal)
+        .map((v) => {
+          const n = typeof v === 'number' ? v : Number.parseInt(String(v), 10);
+          return Number.isFinite(n) ? n : null;
+        })
+        .filter((n) => n != null) as number[];
+      joinPayloads[field] = arr;
+      delete body[field];
+    }
+  }
+
+  return { body, joinPayloads };
+}
+
+function coerceEmptyToNull(spec: DslModelSpec, payload: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...payload };
+  for (const [field, f] of Object.entries(spec.fields || {})) {
+    if (!f || typeof f !== 'object') continue;
+    const type = String((f as any).type || '').toLowerCase();
+    const isNumeric = type === 'int' || type === 'integer' || type === 'bigint' || type === 'float' || type === 'decimal' || type === 'number';
+    const isDatetime = type === 'date' || type === 'datetime';
+    const isBool = type === 'boolean';
+    if (!isNumeric && !isDatetime && !isBool) continue;
+    const val = out[field];
+    if (val === '' || (typeof val === 'string' && val.trim() === '')) out[field] = null;
+  }
+  return out;
+}
+
+function computeAutoName(dsl: DslRoot, modelKey: string, row: Record<string, unknown>): string | null {
+  const spec = asModelSpec(dsl, modelKey);
+  if (!spec) return null;
+  const fields = Array.isArray((spec as any).auto_name) ? ((spec as any).auto_name as string[]) : [];
+  const parts: string[] = [];
+  for (const f of fields) {
+    const v = row?.[f];
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (!s) continue;
+    parts.push(s);
+  }
+  if (!parts.length) return null;
+  return parts.join('_');
+}
+
+function computeChangedFields(before: Record<string, unknown> | null, after: Record<string, unknown>): string[] {
+  const keys = new Set<string>();
+  for (const k of Object.keys(after || {})) keys.add(k);
+  if (before) for (const k of Object.keys(before)) keys.add(k);
+  const changed: string[] = [];
+  for (const k of [...keys].sort((a, b) => a.localeCompare(b))) {
+    const a = before ? (before as any)[k] : undefined;
+    const b = (after as any)[k];
+    const same = a === b || (a == null && b == null);
+    if (!same) changed.push(k);
+  }
+  return changed;
+}
+
+function pruneRowToDsl(spec: DslModelSpec, row: Record<string, any>): Record<string, any> {
+  const allowed = new Set(Object.keys(spec.fields || {}));
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(row || {})) {
+    if (allowed.has(k) || k.endsWith('_auto_name')) out[k] = v;
+  }
+  return out;
+}
+
+function buildPagination(limit: number, totalCount: number, currentPage: number) {
+  if (limit === 0) return null;
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+  return {
+    limit,
+    totalCount,
+    totalPages,
+    currentPage,
+    nextPage: currentPage < totalPages ? currentPage + 1 : null,
+    previousPage: currentPage > 1 ? currentPage - 1 : null,
+  };
+}
+
+async function applyJoinUpdates({
+  orm,
+  modelKey,
+  spec,
+  instance,
+  joinPayloads,
+  transaction,
+}: {
+  orm: OrmInitResult;
+  modelKey: string;
+  spec: DslModelSpec;
+  instance: any;
+  joinPayloads: Record<string, number[]>;
+  transaction?: any;
+}) {
+  const { Op } = getSequelizeLib(orm);
+  const pk = getPrimaryKeyField(instance.constructor);
+  const ownerId = instance?.get ? instance.get(pk) : instance?.[pk];
+  const now = new Date();
+  for (const [field, ids] of Object.entries(joinPayloads)) {
+    const f = spec.fields?.[field] as DslFieldSpec | undefined;
+    if (!f || !isJunctionIntFkField(f)) continue;
+    const joinName = `${modelKey}__${field}__to__${String((f as any).source)}__${String((f as any).sourceid)}`;
+    const Join = (orm.models as any)[joinName];
+    if (!Join) continue;
+    const ownerIdCol = `${modelKey}Id`;
+    const sourceIdCol = `${String((f as any).source)}Id`;
+    const desired = new Set(ids || []);
+
+    const rows = (await Join.findAll({
+      where: { [ownerIdCol]: ownerId },
+      transaction,
+    })) as Array<Record<string, any>>;
+
+    const bySource = new Map<any, Array<any>>();
+    for (const r of rows) {
+      const sid = r?.get ? r.get(sourceIdCol) : r?.[sourceIdCol];
+      if (!bySource.has(sid)) bySource.set(sid, []);
+      bySource.get(sid)!.push(r);
+    }
+
+    for (const sid of desired) {
+      const existing = bySource.get(sid) || [];
+      const active = existing.find((r) => !r.deleted && !r.archived);
+      if (active) continue;
+      const archivedRow = existing.find((r) => r.deleted || r.archived);
+      if (archivedRow && (f as any).unique) {
+        await archivedRow.update(
+          { deleted: false, archived: false, deleted_at: null, archived_at: null, updated_at: now },
+          { transaction },
+        );
+      } else {
+        await Join.create(
+          { [ownerIdCol]: ownerId, [sourceIdCol]: sid, created_at: now, updated_at: now, deleted: false, archived: false },
+          { transaction },
+        );
+      }
+    }
+
+    for (const r of rows) {
+      const sid = r?.get ? r.get(sourceIdCol) : r?.[sourceIdCol];
+      if (!r.deleted && !r.archived && !desired.has(sid)) {
+        await r.update({ archived: true, archived_at: now, updated_at: now }, { transaction });
+      }
+    }
+  }
+}
+
+async function addFkAutoNames({
+  orm,
+  dsl,
+  modelKey,
+  rows,
+  includeDeleted,
+  includeArchived,
+}: {
+  orm: OrmInitResult;
+  dsl: DslRoot;
+  modelKey: string;
+  rows: Array<Record<string, any>>;
+  includeDeleted: boolean;
+  includeArchived: boolean;
+}) {
+  const spec = asModelSpec(dsl, modelKey);
+  if (!spec) return;
+  const targets: Array<{ field: string; source: string; sourceid: string }> = [];
+  for (const [field, f] of Object.entries(spec.fields || {})) {
+    if (!f || typeof f !== 'object') continue;
+    if (isVirtualField(f as any)) continue;
+    if ((f as any).multi === true) continue;
+    const source = (f as any).source;
+    const sourceid = (f as any).sourceid;
+    if (source && sourceid) targets.push({ field, source: String(source), sourceid: String(sourceid) });
+  }
+  if (!targets.length || !rows.length) return;
+
+  for (const target of targets) {
+    const targetSpec = asModelSpec(dsl, target.source);
+    const targetModel = getModel(orm, target.source);
+    if (!targetSpec || !targetModel) continue;
+
+    const ids = [...new Set(rows.map((r) => r[target.field]).filter((v) => v != null))];
+    if (!ids.length) continue;
+
+    const where: any = { [target.sourceid]: { [getSequelizeLib(orm).Op.in]: ids } };
+    if (!includeDeleted) where.deleted = false;
+    if (!includeArchived) where.archived = false;
+
+    const found = (await targetModel.findAll({
+      where,
+      attributes: [target.sourceid, 'auto_name'],
+      raw: true,
+    })) as Array<Record<string, any>>;
+    const map = new Map<any, string | null>();
+    for (const r of found) map.set(r[target.sourceid], r.auto_name ?? null);
+    for (const row of rows) {
+      const v = row[target.field];
+      row[`${target.field}_auto_name`] = map.has(v) ? map.get(v) ?? null : null;
+    }
+  }
+}
+
 function toLikePattern(raw: string): string {
   const s = raw.trim();
   if (s.includes('*')) return s.replace(/\*/g, '%');
@@ -107,7 +359,7 @@ function buildFilterExpr({
 }): any {
   const { Op, where, fn, col, literal } = getSequelizeLib(orm);
   const f = spec.fields?.[field] as DslFieldSpec | undefined;
-  if (!f || isVirtualField(f)) throw new QueryParseError(`Unknown or virtual field in filters: ${field}`, { field });
+  if (!f || isVirtualField(f)) return null;
 
   if (isJunctionIntFkField(f)) {
     const joinName = `${modelKey}__${field}__to__${String((f as any).source)}__${String((f as any).sourceid)}`;
@@ -174,9 +426,9 @@ function buildFiltersWhere({
   const andParts: any[] = [];
 
   for (const group of ast.filters || []) {
-    const orParts = (group.or || []).map((expr: any) =>
-      buildFilterExpr({ orm, modelKey, model, spec, field: group.field, expr }),
-    );
+    const orParts = (group.or || [])
+      .map((expr: any) => buildFilterExpr({ orm, modelKey, model, spec, field: group.field, expr }))
+      .filter(Boolean);
     if (!orParts.length) continue;
     if (orParts.length === 1) andParts.push(orParts[0]!);
     else andParts.push({ [Op.or]: orParts });
@@ -280,10 +532,24 @@ async function buildFindWhere({
   return { [Op.or]: orParts };
 }
 
-function buildOrder(ast: ReturnType<typeof parseListQuery>, pk: string): any[] {
+function buildOrder(ast: ReturnType<typeof parseListQuery>, pk: string, spec: DslModelSpec): any[] {
   const out: any[] = [];
-  for (const s of ast.sort || []) out.push([s.field, s.dir.toUpperCase()]);
-  if (!out.length) return [[pk, 'DESC']];
+  const addToken = (token: string) => {
+    const t = String(token || '').trim();
+    if (!t) return;
+    const dir = t.startsWith('-') ? 'DESC' : 'ASC';
+    const field = t.replace(/^[+-]/, '').trim();
+    if (!field) return;
+    out.push([field, dir]);
+  };
+
+  if (Array.isArray(ast.sort) && ast.sort.length) {
+    for (const s of ast.sort) out.push([s.field, s.dir.toUpperCase()]);
+  } else if (Array.isArray((spec as any).ui?.sort)) {
+    for (const tok of (spec as any).ui.sort as any[]) addToken(String(tok));
+  }
+
+  if (!out.length) out.push([pk, 'DESC']);
   if (!out.some((x) => String(x[0]) === pk)) out.push([pk, 'DESC']);
   return out;
 }
@@ -540,6 +806,7 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
       if (!spec || !model) {
         return res.fail({ code: 404, message: `Unknown model: ${modelKey}`, errors: { root: 'Not found' } });
       }
+      const pk = getPrimaryKeyField(model);
 
       const acl = new AclEngine();
       const aclRes = acl.can({ actor, modelKey, modelSpec: spec, action: 'read' });
@@ -550,7 +817,6 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
       if (!scope.allow) return res.fail({ code: 403, message: (scope as any).reason, errors: { root: 'Forbidden' } });
 
       const ast = parseListQuery(req.query as any);
-      const pk = getPrimaryKeyField(model);
       const whereParts = [
         !ast.includeDeleted ? { deleted: false } : null,
         !ast.includeArchived ? { archived: false } : null,
@@ -561,23 +827,22 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
       const where = whereParts.length <= 1 ? (whereParts[0] ?? {}) : { [Op.and]: whereParts };
 
       const limit = ast.limit;
-      const offset = (ast.page - 1) * limit;
-      const order = buildOrder(ast, pk);
+      const offset = limit > 0 ? (ast.page - 1) * limit : undefined;
+      const order = buildOrder(ast, pk, spec);
       const include =
         ast.includeDepth > 0
           ? buildIncludeGraph({
               orm,
               model,
               depth: ast.includeDepth,
-              includeBelongsTo: false,
+              includeBelongsTo: true,
               includeDefaultFilters: true,
             })
           : undefined;
 
       const rows = (await model.findAll({
         where,
-        limit,
-        offset,
+        ...(limit > 0 ? { limit, offset } : {}),
         order,
         include,
         raw: ast.includeDepth === 0,
@@ -588,18 +853,21 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
           ? rows
           : (rows as any[]).map((r) => ((r as any)?.toJSON ? (r as any).toJSON() : r));
 
-      if (ast.includeDepth === 0) await attachJunctionIds({ orm, modelKey, spec, pk, rows: outRows as any });
+      if (ast.includeDepth === 0) {
+        await attachJunctionIds({ orm, modelKey, spec, pk, rows: outRows as any });
+        await addFkAutoNames({
+          orm,
+          dsl,
+          modelKey,
+          rows: outRows as any,
+          includeDeleted: ast.includeDeleted,
+          includeArchived: ast.includeArchived,
+        });
+        for (const r of outRows as any[]) Object.assign(r, pruneRowToDsl(spec, r));
+      }
 
       const totalCount = (await model.count({ where })) as number;
-      const totalPages = Math.max(1, Math.ceil(totalCount / limit));
-      const pagination = {
-        limit,
-        totalCount,
-        totalPages,
-        currentPage: ast.page,
-        nextPage: ast.page < totalPages ? ast.page + 1 : null,
-        previousPage: ast.page > 1 ? ast.page - 1 : null,
-      };
+      const pagination = buildPagination(limit, totalCount, ast.page);
 
       const registry = getPipelineRegistry(req);
       const services = getServicesForPipeline(req);
@@ -615,7 +883,7 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
           input: r,
           services,
         }).output;
-        pipedRows.push(piped);
+        pipedRows.push(pruneRowToDsl(spec, piped));
       }
 
       return res.ok(pipedRows.map((r) => acl.pruneRead(r)), { code: 200, pagination });
@@ -693,7 +961,18 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
       if (!row) return res.fail({ code: 404, message: 'Not found', errors: { root: 'Not found' } });
 
       const outRow = (row as any)?.toJSON ? (row as any).toJSON() : row;
-      if (includeDepth === 0) await attachJunctionIds({ orm, modelKey, spec, pk, rows: [outRow] });
+      if (includeDepth === 0) {
+        await attachJunctionIds({ orm, modelKey, spec, pk, rows: [outRow] });
+        await addFkAutoNames({
+          orm,
+          dsl,
+          modelKey,
+          rows: [outRow],
+          includeDeleted,
+          includeArchived,
+        });
+        Object.assign(outRow, pruneRowToDsl(spec, outRow));
+      }
 
       const registry = getPipelineRegistry(req);
       const services = getServicesForPipeline(req);
@@ -708,7 +987,7 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
         services,
       }).output;
 
-      return res.ok(acl.pruneRead(piped), { code: 200, pagination: null });
+      return res.ok(acl.pruneRead(pruneRowToDsl(spec, piped)), { code: 200, pagination: null });
     } catch (e: any) {
       if (e instanceof PipelineValidationError) {
         return res.fail({ code: 400, message: e.message, errors: e.errors });
@@ -732,6 +1011,7 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
       if (!spec || !model) {
         return res.fail({ code: 404, message: `Unknown model: ${modelKey}`, errors: { root: 'Not found' } });
       }
+      const pk = getPrimaryKeyField(model);
 
       const acl = new AclEngine();
       const aclRes = acl.can({ actor, modelKey, modelSpec: spec, action: 'create' });
@@ -744,7 +1024,12 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
       const registry = getPipelineRegistry(req);
       const services = getServicesForPipeline(req);
 
-      let payload = applyWriteGuard({ guard, payload: { ...(req.body as any) } });
+      let payload = pruneUnknownPayload(spec, { ...(req.body as any) });
+      const { body: normalizedBody, joinPayloads } = normalizePayloadMultiFields(spec, payload);
+      payload = applyWriteGuard({ guard, payload: normalizedBody });
+      payload = coerceEmptyToNull(spec, payload);
+      const autoName = computeAutoName(dsl, modelKey, payload);
+      if (autoName !== null) payload.auto_name = autoName;
       payload = pipelines.runPhase({
         dsl,
         registrySpec: registry?.get?.(modelKey),
@@ -781,6 +1066,14 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
       const created = await model.create(payload);
       let row = (created as any)?.get ? (created as any).get({ plain: true }) : created;
 
+      await applyJoinUpdates({
+        orm,
+        modelKey,
+        spec,
+        instance: created,
+        joinPayloads,
+      });
+
       row = pipelines.runPhase({
         dsl,
         registrySpec: registry?.get?.(modelKey),
@@ -810,7 +1103,7 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
           action: 'create',
           before: null,
           after: row,
-          changedFields: Object.keys(payload).sort((a, b) => a.localeCompare(b)),
+          changedFields: computeChangedFields(null, row),
           actor,
           origin: getOrigin(req),
           ...(originChain ? { originChain } : {}),
@@ -829,7 +1122,18 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
         services,
       }).output;
 
-      return res.ok(acl.pruneRead(row), { code: 201, pagination: null });
+      await addFkAutoNames({
+        orm,
+        dsl,
+        modelKey,
+        rows: [row as any],
+        includeDeleted: false,
+        includeArchived: false,
+      });
+      await attachJunctionIds({ orm, modelKey, spec, pk, rows: [row as any] });
+      const pruned = pruneRowToDsl(spec, row as any);
+
+      return res.ok(acl.pruneRead(pruned), { code: 201, pagination: null });
     } catch (e: any) {
       if (e instanceof PipelineValidationError) {
         return res.fail({ code: 400, message: e.message, errors: e.errors });
@@ -887,7 +1191,12 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
       const registry = getPipelineRegistry(req);
       const services = getServicesForPipeline(req);
 
-      let payload = applyWriteGuard({ guard, payload: { ...(req.body as any) } });
+      let payload = pruneUnknownPayload(spec, { ...(req.body as any) });
+      const { body: normalizedBody, joinPayloads } = normalizePayloadMultiFields(spec, payload);
+      payload = applyWriteGuard({ guard, payload: normalizedBody });
+      payload = coerceEmptyToNull(spec, payload);
+      const autoName = computeAutoName(dsl, modelKey, { ...before, ...payload });
+      if (autoName !== null) payload.auto_name = autoName;
       payload = pipelines.runPhase({
         dsl,
         registrySpec: registry?.get?.(modelKey),
@@ -924,6 +1233,14 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
       await (existing as any).update(payload);
       let row = (existing as any)?.get ? (existing as any).get({ plain: true }) : existing;
 
+      await applyJoinUpdates({
+        orm,
+        modelKey,
+        spec,
+        instance: existing,
+        joinPayloads,
+      });
+
       row = pipelines.runPhase({
         dsl,
         registrySpec: registry?.get?.(modelKey),
@@ -953,7 +1270,7 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
           action: 'update',
           before: before as any,
           after: row,
-          changedFields: Object.keys(payload).sort((a, b) => a.localeCompare(b)),
+          changedFields: computeChangedFields(before as any, row),
           actor,
           origin: getOrigin(req),
           ...(originChain ? { originChain } : {}),
@@ -972,7 +1289,18 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
         services,
       }).output;
 
-      return res.ok(acl.pruneRead(row), { code: 200, pagination: null });
+      await addFkAutoNames({
+        orm,
+        dsl,
+        modelKey,
+        rows: [row as any],
+        includeDeleted: false,
+        includeArchived: false,
+      });
+      await attachJunctionIds({ orm, modelKey, spec, pk, rows: [row as any] });
+      const pruned = pruneRowToDsl(spec, row as any);
+
+      return res.ok(acl.pruneRead(pruned), { code: 200, pagination: null });
     } catch (e: any) {
       if (e instanceof PipelineValidationError) {
         return res.fail({ code: 400, message: e.message, errors: e.errors });

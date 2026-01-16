@@ -161,10 +161,6 @@ export function initSequelizeModelsFromDsl(sequelize: Sequelize, dsl: DslRoot): 
           ? { name: field, field: String((f as any).columnName) }
           : field;
       const alias = (f as any)?.as || String(source);
-      const inverseAlias =
-        typeof (f as any)?.inverseAs === 'string' && (f as any).inverseAs
-          ? String((f as any).inverseAs)
-          : modelKey;
 
       try {
         m.belongsTo(target, {
@@ -174,19 +170,6 @@ export function initSequelizeModelsFromDsl(sequelize: Sequelize, dsl: DslRoot): 
           onDelete: (f as any)?.onDelete || 'RESTRICT',
           onUpdate: (f as any)?.onUpdate || 'CASCADE',
         });
-      } catch (_) {}
-
-      try {
-        const existing = (target as any).associations?.[inverseAlias];
-        if (!existing) {
-          target.hasMany(m, {
-            as: inverseAlias,
-            foreignKey: fk as any,
-            sourceKey: String(sourceid),
-            onDelete: (f as any)?.onDelete || 'RESTRICT',
-            onUpdate: (f as any)?.onUpdate || 'CASCADE',
-          });
-        }
       } catch (_) {}
     }
   }

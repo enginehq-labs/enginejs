@@ -30,6 +30,7 @@ export type DslFieldSpec = {
 
   transforms?: Array<{ name: string; args?: unknown }>;
   validate?: Array<{ name: string; args?: unknown }>;
+  ui?: { label?: string; [k: string]: unknown };
 };
 
 export type DslModelSpec = {
@@ -49,6 +50,7 @@ export type DslModelSpec = {
   fields: Record<string, DslFieldSpec>;
   indexes?: DslIndexSpec;
   access?: import('../acl/types.js').DslAccessSpec;
+  ui?: { sort?: string[]; [k: string]: unknown };
 };
 
 export type DslRoot = {

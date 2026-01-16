@@ -1,47 +1,34 @@
-# AGENTS.md — EngineJS (Specs-Driven Monorepo)
+# AGENTS.md — EngineJS (Conductor-Driven Monorepo)
 
 ## Source of truth
 
-`specs/` is the only source of truth for EngineJS.
+This project uses [Conductor](https://github.com/Primefit/conductor) for development. The source of truth for the product vision, technical stack, and development workflow is the `conductor/` directory.
 
-- If code and specs disagree, **specs win**.
-- Any behavior change MUST update:
-  - the relevant file(s) in `specs/`
-  - `specs/99-changelog.md`
+- **Product Vision:** `conductor/product.md`
+- **Guidelines:** `conductor/product-guidelines.md`
+- **Tech Stack:** `conductor/tech-stack.md`
+- **Workflow:** `conductor/workflow.md`
+- **Tracks & Plans:** `conductor/tracks.md` and `conductor/tracks/<track_id>/plan.md`
 
-## Deterministic regeneration (hard requirement)
+## Development model
 
-EngineJS must be reproducible even if all non-spec code is deleted and only `specs/` remains.
+EngineJS has transitioned from a spec-driven codegen model to a **standard code-first monorepo** managed by Conductor.
 
-The regeneration contract is defined in:
+- Code in `core/`, `express/`, `auth/`, and `enginehq/` is now the primary source of truth for implementation.
+- All changes must be tracked through Conductor Tracks.
+- Each track must have a corresponding `spec.md` and `plan.md` in its directory under `conductor/tracks/`.
 
-- `specs/90-codegen.md`
-- `specs/templates/manifest.json`
+## Quality Gates
 
-### Clean-room rebuild procedure (expected to work)
-
-1) Delete everything except `specs/` (including `core/`, `node_modules/`, lockfiles, etc.)
-2) Reconstruct the repo by copying templates as described in `specs/90-codegen.md`
-3) Run `npm install`
-4) Run `npm run build`
-
-If anything in this procedure changes, update `specs/90-codegen.md` and `specs/99-changelog.md`.
-
-## Generated vs handwritten
-
-Until a standalone generator exists, treat these as generated outputs that MUST match specs/templates:
-
-- `package.json`, `package-lock.json`, `tsconfig*.json`
-- `core/**`
-
-Do not “hotfix” generated files without first updating the corresponding spec and template.
+All changes must pass the quality gates defined in `conductor/workflow.md`, which include:
+- Test-Driven Development (TDD)
+- >80% test coverage
+- Strict adherence to the documented tech stack
+- Automated and manual verification phases
 
 ## Editing rules
 
-- Prefer changing specs first, then make code reflect the spec.
-- Keep outputs deterministic:
-  - stable ordering
-  - no timestamps
-  - no randomness
-  - pinned toolchain (see `specs/templates/manifest.json`)
-
+- Follow the sequential task list in the active track's `plan.md`.
+- Mark tasks as in-progress `[~]` and completed `[x]` as work proceeds.
+- Commit frequently after completing individual tasks.
+- Perform phase-level verification and checkpointing as prescribed by the workflow.

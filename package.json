@@ -10,19 +10,13 @@
     "enginehq"
   ],
   "scripts": {
-    "gen": "node tools/gen.mjs",
-    "gen:clean": "node tools/gen.mjs --clean",
-    "cycle": "node tools/cycle.mjs",
-    "verify": "npm run gen && npm test",
-    "release:check": "npm run verify && npm -w @enginehq/core pack --dry-run && npm -w @enginehq/auth pack --dry-run && npm -w @enginehq/express pack --dry-run && npm -w enginehq pack --dry-run",
-    "release:publish": "npm run verify && npm publish -w @enginehq/core && npm publish -w @enginehq/auth && npm publish -w @enginehq/express && npm publish -w enginehq",
+    "release:check": "npm run test && npm -w @enginehq/core pack --dry-run && npm -w @enginehq/auth pack --dry-run && npm -w @enginehq/express pack --dry-run && npm -w enginehq pack --dry-run",
+    "release:publish": "npm run test && npm publish -w @enginehq/core && npm publish -w @enginehq/auth && npm publish -w @enginehq/express && npm publish -w enginehq",
     "build": "npm --workspaces run build",
     "typecheck": "npm --workspaces run typecheck",
     "test:unit": "npm --workspaces run test:unit",
-    "test:integration": "node tools/verify_templates.mjs && npm --workspaces run test:integration",
-    "test:e2e": "node tools/verify_regen.mjs",
-    "test": "npm run test:unit && npm run test:integration && npm run test:e2e",
-    "gen:check": "node tools/verify_templates.mjs"
+    "test:integration": "npm --workspaces run test:integration",
+    "test": "npm run test:unit && npm run test:integration"
   },
   "devDependencies": {
     "@types/node": "22.19.3",

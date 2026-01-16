@@ -51,8 +51,10 @@ See `RELEASING.md`.
 
 ## Development model
 
-This repo is deterministic/specs-driven:
+This repo uses [Conductor](https://github.com/Primefit/conductor), a spec-driven development framework. All project context, tracks, and implementation plans are located in the `conductor/` directory.
 
-- `specs/` is the source of truth
-- `specs/templates/**` must match generated outputs
-- regenerate via `npm run gen` and validate via `npm test`
+- `conductor/product.md` — Product vision and scope
+- `conductor/tech-stack.md` — Canonical technology stack
+- `conductor/workflow.md` — Development and task procedures
+- `conductor/tracks.md` — Project tracks and progress tracking
+
