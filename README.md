@@ -51,7 +51,7 @@ See `RELEASING.md`.
 
 ## Development model
 
-This repo uses [Conductor](https://github.com/Primefit/conductor), a spec-driven development framework. All project context, tracks, and implementation plans are located in the `conductor/` directory.
+This repo uses [Conductor](https://github.com/gemini-cli-extensions/conductor), a spec-driven development framework. All project context, tracks, and implementation plans are located in the `conductor/` directory.
 
 - `conductor/product.md` — Product vision and scope
 - `conductor/tech-stack.md` — Canonical technology stack

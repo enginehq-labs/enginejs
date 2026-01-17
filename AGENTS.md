@@ -2,7 +2,7 @@
 
 ## Source of truth
 
-This project uses [Conductor](https://github.com/Primefit/conductor) for development. The source of truth for the product vision, technical stack, and development workflow is the `conductor/` directory.
+This project uses [Conductor](https://github.com/gemini-cli-extensions/conductor) for development. The source of truth for the product vision, technical stack, and development workflow is the `conductor/` directory.
 
 - **Product Vision:** `conductor/product.md`
 - **Guidelines:** `conductor/product-guidelines.md`
