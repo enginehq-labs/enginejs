@@ -1,0 +1,19 @@
+{
+  "name": "link-shortener",
+  "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "start": "node --import tsx .",
+    "dev": "node --import tsx .",
+    "sync": "node --import tsx ../../enginehq/bin/enginehq.js sync",
+    "workflows:sync": "node --import tsx ../../enginehq/bin/enginehq.js workflows sync --overwrite",
+    "workflows:run": "node --import tsx ../../enginehq/bin/enginehq.js workflows worker"
+  },
+  "dependencies": {
+    "enginehq": "file:../../enginehq"
+  },
+  "devDependencies": {
+    "sqlite3": "^5.1.7"
+  }
+}

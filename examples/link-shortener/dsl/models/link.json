@@ -1,0 +1,24 @@
+{
+  "link": {
+    "pipelines": {
+      "read": {
+        "response": [{ "op": "custom", "name": "recordClick" }]
+      }
+    },
+    "fields": {
+      "id": { "type": "int", "primary": true, "autoIncrement": true },
+      "slug": { "type": "string", "required": true, "unique": true },
+      "url": { "type": "string", "required": true },
+      "title": { "type": "string" },
+      "total_clicks": { "type": "int", "default": 0 },
+      "owner": { "type": "int", "source": "user", "sourceid": "id" },
+      "tags": { "type": "int", "multi": true, "source": "tag", "sourceid": "id" }
+    },
+    "access": {
+      "read": ["user"],
+      "create": ["user"],
+      "update": ["user"],
+      "delete": ["user"]
+    }
+  }
+}

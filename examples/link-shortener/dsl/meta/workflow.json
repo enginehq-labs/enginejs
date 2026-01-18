@@ -1,0 +1,22 @@
+{
+  "workflow": {
+    "fields": {
+      "id": { "type": "int", "primary": true, "autoIncrement": true },
+      "slug": { "type": "string", "required": true, "unique": true },
+      "name": { "type": "string", "required": true },
+      "description": { "type": "text" },
+      "enabled": { "type": "boolean", "default": true },
+      "spec": { "type": "jsonb", "required": true, "validate": [{ "name": "workflowSpec" }] }
+    },
+    "indexes": {
+      "unique": [["slug"]],
+      "many": [["name"]]
+    },
+    "access": {
+      "read": ["admin"],
+      "create": ["admin"],
+      "update": ["admin"],
+      "delete": ["admin"]
+    }
+  }
+}

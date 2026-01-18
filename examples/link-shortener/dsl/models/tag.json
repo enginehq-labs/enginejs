@@ -1,0 +1,14 @@
+{
+  "tag": {
+    "fields": {
+      "id": { "type": "int", "primary": true, "autoIncrement": true },
+      "name": { "type": "string", "required": true, "unique": true }
+    },
+    "access": {
+      "read": ["*"],
+      "create": ["*"],
+      "update": ["*"],
+      "delete": ["*"]
+    }
+  }
+}

@@ -1,5 +1,7 @@
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import type { Actor } from '@enginehq/core';
 import { createEngine } from '@enginehq/core';
@@ -22,6 +24,31 @@ export async function startEngineJsApp(cwd = process.cwd()): Promise<void> {
 
   const services = engine.services;
   const workflows = services.resolve('workflows', { scope: 'singleton' });
+
+  // Autoload custom ops and steps if they exist
+  const opsPath = path.join(cwd, 'pipeline', 'ops.ts');
+  if (fs.existsSync(opsPath)) {
+    try {
+      const mod = await import(pathToFileURL(opsPath).href);
+      if (typeof mod.default === 'function') {
+        await mod.default({ engine });
+      }
+    } catch (e) {
+      console.warn(`[enginejs] failed to load pipeline ops from ${opsPath}`, e);
+    }
+  }
+
+  const stepsPath = path.join(cwd, 'workflow', 'steps.ts');
+  if (fs.existsSync(stepsPath)) {
+    try {
+      const mod = await import(pathToFileURL(stepsPath).href);
+      if (typeof mod.default === 'function') {
+        await mod.default({ engine });
+      }
+    } catch (e) {
+      console.warn(`[enginejs] failed to load workflow steps from ${stepsPath}`, e);
+    }
+  }
 
   const autoload = cfg.autoload ?? {};
   await autoloadPipelines({

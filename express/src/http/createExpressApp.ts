@@ -20,6 +20,9 @@ export type ExpressAppOptions = {
 export function createExpressApp(opts: ExpressAppOptions) {
   const app = express();
   const basePath = opts.basePath ?? '';
+  const config = opts.getConfig();
+  const adminPath = config.http?.adminPath ?? '/admin';
+  const crudPath = config.http?.crudPath ?? '/api';
 
   app.use(express.json({ limit: '2mb' }));
   app.use(responseEnvelope);
@@ -40,11 +43,11 @@ export function createExpressApp(opts: ExpressAppOptions) {
 
   app.get(`${basePath}/health`, (_req, res) => res.ok({ ok: true }, { code: 200, pagination: null }));
   app.use(
-    `${basePath}/admin`,
+    `${basePath}${adminPath}`,
     createAdminRouter({ getDsl: opts.getDsl as any, getOrm: opts.getOrm as any, getConfig: opts.getConfig }),
   );
   app.use(
-    `${basePath}/api`,
+    `${basePath}${crudPath}`,
     createCrudRouter({ getDsl: opts.getDsl, getOrm: opts.getOrm, getConfig: opts.getConfig }),
   );
 

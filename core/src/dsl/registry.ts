@@ -76,7 +76,7 @@ export function augmentDslWithSystemFields(dsl: DslRoot): void {
 
     if (!spec.ui || typeof spec.ui !== 'object' || Array.isArray(spec.ui)) spec.ui = {};
     if (!Object.prototype.hasOwnProperty.call(spec.ui, 'sort')) {
-      (spec.ui as any).sort = ['-created_on'];
+      (spec.ui as any).sort = ['-created_at'];
     }
 
     const fields = (spec.fields ||= {});

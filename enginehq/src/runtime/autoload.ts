@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import express from 'express';
 import type { Express } from 'express';
 
 import type { EngineRuntime } from '@enginehq/core';
@@ -79,11 +80,24 @@ export async function autoloadWorkflows(args: {
 }
 
 export async function autoloadRoutes(args: { cwd: string; routesDir: string; app: Express; engine: EngineRuntime }): Promise<void> {
+  const routesPath = args.engine.config.http?.routesPath ?? '';
   const dir = path.isAbsolute(args.routesDir) ? args.routesDir : path.join(args.cwd, args.routesDir);
   for (const filePath of listModuleFiles(dir)) {
     const mod = await importFile(filePath);
     const fn = mod?.default ?? mod?.registerRoutes ?? null;
     if (typeof fn !== 'function') continue;
-    await fn({ app: args.app, engine: args.engine });
+
+    // Local override in the route file (e.g., export const path = '/special')
+    // If null/undefined, fall back to the global routesPath.
+    const overridePath = mod?.path ?? mod?.prefix ?? null;
+    const prefix = overridePath !== null ? String(overridePath) : routesPath;
+
+    if (prefix && prefix !== '/') {
+      const router = express.Router();
+      await fn({ app: router as any, engine: args.engine });
+      args.app.use(prefix, router);
+    } else {
+      await fn({ app: args.app, engine: args.engine });
+    }
   }
 }

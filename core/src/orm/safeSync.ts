@@ -336,7 +336,7 @@ export async function safeSync(opts: SafeSyncOptions): Promise<SafeSyncReport> {
     const hasDeleted = !!(model as any).rawAttributes?.deleted;
     const hasArchived = !!(model as any).rawAttributes?.archived;
     if (hasDeleted && hasArchived) {
-      const sql = `CREATE INDEX IF NOT EXISTS ${idxName} ON ${table}(${pk}) WHERE deleted=false AND archived=false`;
+      const sql = `CREATE INDEX IF NOT EXISTS "${idxName}" ON "${table}"(${pk}) WHERE deleted=false AND archived=false`;
       if (!dryRun) await opts.sequelize.query(sql);
       report.createdIndexes.push({ table, name: idxName });
     }
@@ -362,12 +362,12 @@ export async function safeSync(opts: SafeSyncOptions): Promise<SafeSyncReport> {
         const mapped = cols.map(mapCol);
         const name = mkName('uidx', mapped);
         if (hasDeleted && hasArchived) {
-          const sql = `CREATE UNIQUE INDEX IF NOT EXISTS ${name} ON ${table}(${mapped.join(
+          const sql = `CREATE UNIQUE INDEX IF NOT EXISTS "${name}" ON "${table}"(${mapped.join(
             ',',
           )}) WHERE deleted=false AND archived=false`;
           if (!dryRun) await opts.sequelize.query(sql);
         } else {
-          const sql = `CREATE UNIQUE INDEX IF NOT EXISTS ${name} ON ${table}(${mapped.join(',')})`;
+          const sql = `CREATE UNIQUE INDEX IF NOT EXISTS "${name}" ON "${table}"(${mapped.join(',')})`;
           if (!dryRun) await opts.sequelize.query(sql);
         }
         report.createdIndexes.push({ table, name });
@@ -377,10 +377,10 @@ export async function safeSync(opts: SafeSyncOptions): Promise<SafeSyncReport> {
         const mapped = cols.map(mapCol);
         const name = mkName('idx', mapped);
         if (hasDeleted && hasArchived) {
-          const sql = `CREATE INDEX IF NOT EXISTS ${name} ON ${table}(${mapped.join(',')}) WHERE deleted=false AND archived=false`;
+          const sql = `CREATE INDEX IF NOT EXISTS "${name}" ON "${table}"(${mapped.join(',')}) WHERE deleted=false AND archived=false`;
           if (!dryRun) await opts.sequelize.query(sql);
         } else {
-          const sql = `CREATE INDEX IF NOT EXISTS ${name} ON ${table}(${mapped.join(',')})`;
+          const sql = `CREATE INDEX IF NOT EXISTS "${name}" ON "${table}"(${mapped.join(',')})`;
           if (!dryRun) await opts.sequelize.query(sql);
         }
         report.createdIndexes.push({ table, name });

@@ -1,0 +1,18 @@
+{
+  "analytics_event": {
+    "fields": {
+      "id": { "type": "int", "primary": true, "autoIncrement": true },
+      "ip": { "type": "string" },
+      "userAgent": { "type": "string" },
+      "referrer": { "type": "string" },
+      "timestamp": { "type": "datetime", "default": "now" },
+      "link": { "type": "int", "source": "link", "sourceid": "id" }
+    },
+    "access": {
+      "read": ["user"],
+      "create": ["user"],
+      "update": ["user"],
+      "delete": ["user"]
+    }
+  }
+}

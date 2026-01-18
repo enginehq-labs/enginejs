@@ -10,7 +10,14 @@ export type WorkflowsConfig = {
 
 export type EngineConfig = {
   app: { name: string; env: 'development' | 'test' | 'staging' | 'production' };
-  http?: { basePath?: string; trustProxy?: boolean; hideExistence?: boolean };
+  http?: {
+    basePath?: string;
+    crudPath?: string;
+    adminPath?: string;
+    routesPath?: string;
+    trustProxy?: boolean;
+    hideExistence?: boolean;
+  };
   db: { url: string; dialect?: 'postgres' };
   dsl: {
     schemaPath?: string;

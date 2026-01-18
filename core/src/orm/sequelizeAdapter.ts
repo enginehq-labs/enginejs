@@ -113,7 +113,11 @@ export function initSequelizeModelsFromDsl(sequelize: Sequelize, dsl: DslRoot): 
 
       const dt = mapType(String(type || ''), (f as any)?.max || (f as any)?.length || (f as any)?.size);
       const a: any = { type: dt };
-      if ((f as any)?.default !== undefined) a.defaultValue = (f as any).default;
+      if ((f as any)?.default !== undefined) {
+        const def = (f as any).default;
+        if (def === 'now') a.defaultValue = DataTypes.NOW;
+        else a.defaultValue = def;
+      }
       if ((f as any)?.primary === true) a.primaryKey = true;
       if ((f as any)?.autoIncrement === true && isIntType(type)) a.autoIncrement = true;
 

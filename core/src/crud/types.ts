@@ -1,4 +1,5 @@
 import type { Actor } from '../actors/types.js';
+import type { PipelineCtx } from '../pipelines/types.js';
 
 export type CrudAction = 'list' | 'read' | 'create' | 'update' | 'delete';
 
@@ -17,6 +18,7 @@ export type CrudCallOptions = {
   runPipelines?: boolean;
   runResponsePipeline?: boolean;
   bypassAclRls?: boolean;
+  services?: PipelineCtx['services'];
 };
 
 export type CrudListResult = {

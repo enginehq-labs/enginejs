@@ -9,6 +9,7 @@ import type { OrmInitResult } from '../orm/types.js';
 import type { DslModelSpec, DslRoot } from '../dsl/types.js';
 import { isDslModelSpec } from '../dsl/types.js';
 import { PipelineEngine } from '../pipelines/engine.js';
+import type { WorkflowEngine } from '../workflows/engine.js';
 import type { PipelineRegistry, ServiceRegistry } from '../services/types.js';
 import { parseListQuery } from '../query/parser.js';
 import { QueryParseError } from '../query/errors.js';
@@ -462,6 +463,18 @@ export class CrudService {
     };
   }
 
+  private async emitWorkflow(args: { model: string; action: 'create' | 'update' | 'delete'; before: any; after: any; actor?: any }) {
+    if (!this.deps.services.has('workflowEngine')) return;
+    const engine = this.deps.services.resolve<WorkflowEngine>('workflowEngine', { scope: 'singleton' });
+    await engine.emitModelEvent({
+      model: args.model,
+      action: args.action,
+      before: args.before,
+      after: args.after,
+      actor: args.actor,
+    });
+  }
+
   async list(args: CrudCtx & { modelKey: string; query?: CrudListQuery; options?: CrudCallOptions }): Promise<CrudListResult> {
     const orm = this.getOrm();
     const dsl = this.getDsl();
@@ -535,7 +548,7 @@ export class CrudService {
       const runResponsePipeline = args.options?.runResponsePipeline !== false;
       if (runPipelines && runResponsePipeline) {
         const registry = this.getPipelineRegistry();
-        const services = this.pipelineServices();
+        const services = args.options?.services ?? this.pipelineServices();
         const acl = new AclEngine();
         outRows = rows.map((r) => {
           const piped = this.pipelines.runPhase({
@@ -638,7 +651,7 @@ export class CrudService {
 
       const runPipelines = args.options?.runPipelines !== false;
       const registry = this.getPipelineRegistry();
-      const services = this.pipelineServices();
+      const services = args.options?.services ?? this.pipelineServices();
 
       let payload = pruneUnknownPayload(spec, { ...args.values });
       const { body: normalizedBody, joinPayloads } = normalizePayloadMultiFields(spec, payload);
@@ -721,13 +734,15 @@ export class CrudService {
       await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row as any] });
       row = pruneRowToDsl(spec, row as any);
 
+      await this.emitWorkflow({ model: args.modelKey, action: 'create', before: null, after: row, actor: args.actor });
+
       return acl.pruneRead(row);
     }
 
     // bypass mode: no ACL/RLS; pipelines still optional
     const runPipelines = args.options?.runPipelines !== false;
     const registry = this.getPipelineRegistry();
-    const services = this.pipelineServices();
+    const services = args.options?.services ?? this.pipelineServices();
     let payload = pruneUnknownPayload(spec, { ...args.values });
     const { body: normalizedBody, joinPayloads } = normalizePayloadMultiFields(spec, payload);
     payload = coerceEmptyToNull(spec, normalizedBody);
@@ -790,6 +805,7 @@ export class CrudService {
       }).output;
     }
     await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row as any] });
+    await this.emitWorkflow({ model: args.modelKey, action: 'create', before: null, after: row, actor: args.actor });
     return pruneRowToDsl(spec, row as any);
   }
 
@@ -828,7 +844,7 @@ export class CrudService {
       const runPipelines = args.options?.runPipelines !== false;
       const runResponsePipeline = args.options?.runResponsePipeline !== false;
       const registry = this.getPipelineRegistry();
-      const services = this.pipelineServices();
+      const services = args.options?.services ?? this.pipelineServices();
       let outRow = row;
       if (runPipelines && runResponsePipeline) {
         outRow = this.pipelines.runPhase({
@@ -892,7 +908,7 @@ export class CrudService {
 
       const runPipelines = args.options?.runPipelines !== false;
       const registry = this.getPipelineRegistry();
-      const services = this.pipelineServices();
+      const services = args.options?.services ?? this.pipelineServices();
 
       let payload = pruneUnknownPayload(spec, { ...args.values });
       const { body: normalizedBody, joinPayloads } = normalizePayloadMultiFields(spec, payload);
@@ -973,6 +989,7 @@ export class CrudService {
       }
 
       await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row as any] });
+      await this.emitWorkflow({ model: args.modelKey, action: 'update', before, after: row, actor: args.actor });
       return pruneRowToDsl(spec, new AclEngine().pruneRead(row));
     }
 
@@ -983,11 +1000,12 @@ export class CrudService {
     const where = whereParts.length === 1 ? whereParts[0]! : { [getSequelizeLib(orm).Op.and]: whereParts };
     const existing = await (model as any).findOne({ where });
     if (!existing) throw new CrudNotFoundError('Not found');
+    const before = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
 
     let payload = pruneUnknownPayload(spec, { ...args.values });
     const { body: normalizedBody, joinPayloads } = normalizePayloadMultiFields(spec, payload);
     payload = coerceEmptyToNull(spec, normalizedBody);
-    const autoName = computeAutoName(dsl, args.modelKey, { ...(existing as any).get?.({ plain: true }), ...payload });
+    const autoName = computeAutoName(dsl, args.modelKey, { ...before, ...payload });
     if (autoName !== null) payload.auto_name = autoName;
     payload = stripVirtualFields(spec, payload);
     await (existing as any).update(payload);
@@ -1000,6 +1018,7 @@ export class CrudService {
     });
     const row = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
     await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row as any] });
+    await this.emitWorkflow({ model: args.modelKey, action: 'update', before, after: row, actor: args.actor });
     return pruneRowToDsl(spec, row as any);
   }
 
@@ -1032,6 +1051,7 @@ export class CrudService {
       if (!existing) throw new CrudNotFoundError('Not found');
       await (existing as any).update({ deleted: true, deleted_at: new Date() });
       const row = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
+      await this.emitWorkflow({ model: args.modelKey, action: 'delete', before: row, after: null, actor: args.actor });
       return pruneRowToDsl(spec, new AclEngine().pruneRead(row));
     }
 
@@ -1040,6 +1060,7 @@ export class CrudService {
     if (!existing) throw new CrudNotFoundError('Not found');
     await (existing as any).update({ deleted: true, deleted_at: new Date() });
     const row = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
+    await this.emitWorkflow({ model: args.modelKey, action: 'delete', before: row, after: null, actor: args.actor });
     return pruneRowToDsl(spec, row);
   }
 

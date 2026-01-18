@@ -14,11 +14,12 @@ function usage(code = 0): never {
   enginehq init <dir> [--force]
   enginehq sync [--dry-run] [--requireSnapshot] [--allowNoSnapshot]
   enginehq workflows sync [--overwrite]
+  enginehq workflows worker
   enginehq start
   enginehq dev
 
 Notes:
-  - Apps run via \`node --loader tsx .\` with package.json main pointing to enginehq runtime.
+  - Apps run via \`node --import tsx .\` with package.json main pointing to enginehq runtime.
 `;
   (code === 0 ? process.stdout : process.stderr).write(msg);
   process.exit(code);
@@ -88,8 +89,8 @@ export function initEngineJsApp(opts: InitAppOptions): void {
       type: 'module',
       main: './node_modules/enginehq/dist/runtime/app.js',
       scripts: {
-        start: 'node --loader tsx .',
-        dev: 'node --loader tsx .',
+        start: 'node --import tsx .',
+        dev: 'node --import tsx .',
       },
       dependencies: {
         enginehq: '^0.1.2',
@@ -285,7 +286,7 @@ function runtimeWorkflowsSyncPath() {
 function spawnStart({ cwd }: { cwd: string }) {
   const node = process.execPath;
   const rt = runtimePath();
-  const child = spawn(node, ['--loader', 'tsx', rt], {
+  const child = spawn(node, ['--import', 'tsx', rt], {
     cwd,
     stdio: 'inherit',
     env: process.env,
@@ -296,8 +297,23 @@ function spawnStart({ cwd }: { cwd: string }) {
 function spawnWorkflowsSync({ cwd, overwrite }: { cwd: string; overwrite: boolean }) {
   const node = process.execPath;
   const rt = runtimeWorkflowsSyncPath();
-  const args = ['--loader', 'tsx', rt, ...(overwrite ? ['--overwrite'] : [])];
+  const args = ['--import', 'tsx', rt, ...(overwrite ? ['--overwrite'] : [])];
   const child = spawn(node, args, {
+    cwd,
+    stdio: 'inherit',
+    env: process.env,
+  });
+  child.on('exit', (code) => process.exit(code ?? 0));
+}
+
+function runtimeWorkflowsWorkerPath() {
+  return fileURLToPath(new URL('./runtime/workflowsWorker.js', import.meta.url));
+}
+
+function spawnWorkflowsWorker({ cwd }: { cwd: string }) {
+  const node = process.execPath;
+  const rt = runtimeWorkflowsWorkerPath();
+  const child = spawn(node, ['--import', 'tsx', rt], {
     cwd,
     stdio: 'inherit',
     env: process.env,
@@ -353,6 +369,10 @@ export async function runCli(argv = process.argv): Promise<void> {
     const sub = positionals[0] || '';
     if (sub === 'sync') {
       spawnWorkflowsSync({ cwd: process.cwd(), overwrite: flags.has('--overwrite') });
+      return;
+    }
+    if (sub === 'worker') {
+      spawnWorkflowsWorker({ cwd: process.cwd() });
       return;
     }
     usage(1);

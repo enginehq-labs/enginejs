@@ -1,0 +1,14 @@
+{
+  "user": {
+    "fields": {
+      "id": { "type": "int", "primary": true, "autoIncrement": true },
+      "email": { "type": "string", "required": true, "unique": true }
+    },
+    "access": {
+      "read": ["*"],
+      "create": ["*"],
+      "update": ["*"],
+      "delete": ["*"]
+    }
+  }
+}

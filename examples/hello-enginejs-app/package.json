@@ -4,8 +4,8 @@
   "type": "module",
   "main": "./node_modules/enginehq/dist/runtime/app.js",
   "scripts": {
-    "start": "node --loader tsx .",
-    "dev": "node --loader tsx ."
+    "start": "node --import tsx .",
+    "dev": "node --import tsx ."
   },
   "dependencies": {
     "enginehq": "^0.1.2"
