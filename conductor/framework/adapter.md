@@ -22,21 +22,40 @@ The router maps HTTP verbs to model operations:
 - **`PATCH /api/:model/:id`**: Update an existing record.
 - **`DELETE /api/:model/:id`**: Soft-delete a record.
 
-### Custom Routes
-Custom routes defined in the `routes/` directory are automatically registered.
+### Custom Routes & File-Based Routing
 
-- **Global Prefix**: You can set a global prefix for all custom routes using `http.routesPath` in `enginejs.config.ts`.
-- **Route Override**: Individual route files can override the global prefix by exporting a `path` (or `prefix`) constant.
+EngineJS supports file-based routing, inspired by frameworks like Next.js, allowing you to define custom API endpoints by organizing files within a `routes/` directory. The `autoloadRoutes` function automatically discovers and registers these routes.
 
-Example:
+- **File-Based Mapping**: The directory structure within `routes/` directly maps to the URL path.
+  - Example: A file at `routes/users/profile.ts` would map to `/api/users/profile`.
+- **`index.ts` Files**: An `index.ts` file in a directory will be mounted at the parent directory's path.
+  - Example: `routes/users/index.ts` would map to `/api/users`.
+- **Dynamic Segments**: Use square brackets `[param]` in file or folder names to create dynamic URL segments. These are automatically converted to Express-style `:param` (e.g., `:id`).
+  - Example: `routes/users/[id].ts` maps to `/api/users/:id`.
+  - Example: `routes/[version]/items.ts` maps to `/api/:version/items`.
+- **Global Prefix**: You can set a global prefix for all custom routes using `http.routesPath` in `enginejs.config.ts`. The default is `/api`.
+- **Route Override**: Individual route files can override the global prefix or their generated path by exporting a `path` (or `prefix`) constant. This allows for fine-grained control over specific route endpoints.
+
+**Example: `routes/items/[id].ts`**
+
 ```typescript
-// routes/my-route.ts
-export const path = '/v1/special'; // Override global prefix
+// examples/my-app/routes/items/[id].ts
+import type { Express } from 'express';
+import type { EngineRuntime } from '@enginehq/core';
 
-export default async function register({ app, engine }) {
-  app.get('/hello', (req, res) => res.ok({ hello: 'world' }));
+// This route will be mounted at /api/items/:id (assuming http.routesPath is /api)
+export default async function registerRoutes({ app, engine }: { app: Express, engine: EngineRuntime }) {
+  app.get('/:id', (req, res) => {
+    const { id } = req.params;
+    res.ok({ message: `Fetching item with ID: ${id}` });
+  });
+
+  app.post('/:id/update', (req, res) => {
+    const { id } = req.params;
+    const { data } = req.body;
+    res.ok({ message: `Updating item ${id} with data: ${JSON.stringify(data)}` });
+  });
 }
-// Accessible at: /v1/special/hello
 ```
 
 ### Response Structure
