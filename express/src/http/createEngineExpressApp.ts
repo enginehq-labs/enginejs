@@ -10,10 +10,11 @@ export type CreateEngineExpressAppOptions = {
   basePath?: string;
   resolveActor?: ActorResolver;
   defaultActor?: Actor;
+  registerCustomRoutes?: (app: Express, engine: EngineRuntime) => Promise<void>;
 };
 
-export function createEngineExpressApp(engine: EngineRuntime, opts: CreateEngineExpressAppOptions = {}): Express {
-  return createExpressApp({
+export async function createEngineExpressApp(engine: EngineRuntime, opts: CreateEngineExpressAppOptions = {}): Promise<Express> {
+  return await createExpressApp({
     basePath: opts.basePath ?? engine.config.http?.basePath ?? '',
     services: engine.services,
     getConfig: () => engine.config,
@@ -21,5 +22,6 @@ export function createEngineExpressApp(engine: EngineRuntime, opts: CreateEngine
     getOrm: () => engine.services.resolve('orm', { scope: 'singleton' }),
     ...(opts.resolveActor ? { resolveActor: opts.resolveActor } : {}),
     ...(opts.defaultActor ? { defaultActor: opts.defaultActor } : {}),
+    ...(opts.registerCustomRoutes ? { registerCustomRoutes: opts.registerCustomRoutes } : {}),
   });
 }

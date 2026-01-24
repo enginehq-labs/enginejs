@@ -4,27 +4,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { Actor } from '@enginehq/core';
+import type { Express } from 'express'; // Added import for Express
+import type { WorkflowRegistry } from '@enginehq/core';
 import { createEngine } from '@enginehq/core';
 import { createEngineExpressApp } from '@enginehq/express';
-
 import { autoloadPipelines, autoloadRoutes, autoloadWorkflows } from './autoload.js';
 import { loadEngineJsConfig } from './config.js';
 
-const defaultActor: Actor = {
-  isAuthenticated: false,
-  subjects: {},
-  roles: [],
-  claims: {},
-};
-
-export async function startEngineJsApp(cwd = process.cwd()): Promise<void> {
+async function startEngineJsApp(cwd = process.cwd()): Promise<void> {
   const cfg = await loadEngineJsConfig(cwd);
   const engine = createEngine(cfg.engine);
-  await engine.init();
-
-  const services = engine.services;
-  const workflows = services.resolve('workflows', { scope: 'singleton' });
-
+  
   // Autoload custom ops and steps if they exist
   const opsPath = path.join(cwd, 'pipeline', 'ops.ts');
   if (fs.existsSync(opsPath)) {
@@ -50,48 +40,32 @@ export async function startEngineJsApp(cwd = process.cwd()): Promise<void> {
     }
   }
 
+  const services = engine.services;
+  const workflows = services.resolve('workflows', { scope: 'singleton' }) as WorkflowRegistry;
+
   const autoload = cfg.autoload ?? {};
   await autoloadPipelines({
     cwd,
     pipelinesDir: autoload.pipelinesDir ?? 'pipeline',
     services,
   });
-  if ((cfg.engine.workflows as any)?.registry !== 'db') {
-    await autoloadWorkflows({ cwd, workflowsDir: autoload.workflowsDir ?? 'workflow', registry: workflows as any });
-  }
-
-  const app = createEngineExpressApp(engine, {
-    defaultActor,
-    ...(cfg.resolveActor ? { resolveActor: cfg.resolveActor as any } : {}),
+  await autoloadWorkflows({
+    cwd,
+    workflowsDir: autoload.workflowsDir ?? 'workflow',
+    registry: workflows,
   });
 
-  await autoloadRoutes({ cwd, routesDir: autoload.routesDir ?? 'routes', app, engine });
+  const app = await createEngineExpressApp(engine, {
+    registerCustomRoutes: async (expressApp, runtimeEngine) => {
+      await autoloadRoutes({ cwd, routesDir: autoload.routesDir ?? 'routes', app: expressApp, engine: runtimeEngine });
+    },
+  });
 
-  const host = cfg.http.host;
-  const port = cfg.http.port;
 
-  await new Promise<void>((resolve) => {
-    const srv = host
-      ? app.listen(port, host, () => {
-          const addr = `${host}:${port}`;
-          console.log(`[enginejs] listening on ${addr}`);
-          resolve();
-        })
-      : app.listen(port, () => {
-          console.log(`[enginejs] listening on :${port}`);
-          resolve();
-        });
-    srv.on('error', (err) => {
-      console.error('[enginejs] server error', err);
-      process.exit(1);
-    });
+  const port = cfg.http.port || 3000;
+  app.listen(port, () => {
+    console.log(`[link-shortener] listening on :${port}`);
   });
 }
 
-const entry = process.argv[1];
-if (entry && import.meta.url === pathToFileURL(entry).href) {
-  startEngineJsApp().catch((e) => {
-    console.error('[enginejs] fatal', e);
-    process.exit(1);
-  });
-}
+export { startEngineJsApp };

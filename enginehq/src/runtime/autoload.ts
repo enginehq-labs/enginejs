@@ -79,25 +79,81 @@ export async function autoloadWorkflows(args: {
   }
 }
 
+// Helper functions for autoloadRoutes
+function walkRoutes(dir: string): string[] {
+  const files: string[] = [];
+  if (!fs.existsSync(dir)) return [];
+  const entries = fs
+    .readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const res = path.resolve(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...walkRoutes(res));
+    } else if (/\.(ts|js|mjs)$/.test(entry.name)) {
+      files.push(res);
+    }
+  }
+  return files.sort((a, b) => a.localeCompare(b));
+}
+
+
+function resolveRoutePath(filePath: string, routesDir: string): string {
+  const relativePath = path.relative(routesDir, filePath);
+  // Strip extension
+  let routePath = relativePath.replace(/\.(ts|js|mjs)$/, '');
+  
+  // Handle index.ts
+  if (routePath === 'index' || routePath.endsWith('/index')) {
+    routePath = routePath.slice(0, -5); // remove 'index'
+  }
+  
+  // Ensure starts with / and ends without /
+  if (!routePath.startsWith('/')) routePath = '/' + routePath;
+  if (routePath.endsWith('/') && routePath.length > 1) routePath = routePath.slice(0, -1);
+  
+  // Convert [param] to :param
+  // We no longer convert dynamic segments here, as the router itself handles them.
+  // routePath = routePath.replace(/\[([^\]]+)\]/g, ':$1'); 
+  
+  return routePath;
+}
+
 export async function autoloadRoutes(args: { cwd: string; routesDir: string; app: Express; engine: EngineRuntime }): Promise<void> {
-  const routesPath = args.engine.config.http?.routesPath ?? '';
-  const dir = path.isAbsolute(args.routesDir) ? args.routesDir : path.join(args.cwd, args.routesDir);
-  for (const filePath of listModuleFiles(dir)) {
+  const defaultPrefix = args.engine.config.http?.routesPath ?? '/api';
+  const routesDir = path.isAbsolute(args.routesDir) ? args.routesDir : path.join(args.cwd, args.routesDir);
+  
+  const files = walkRoutes(routesDir);
+  
+  for (const filePath of files) {
     const mod = await importFile(filePath);
     const fn = mod?.default ?? mod?.registerRoutes ?? null;
     if (typeof fn !== 'function') continue;
 
     // Local override in the route file (e.g., export const path = '/special')
-    // If null/undefined, fall back to the global routesPath.
     const overridePath = mod?.path ?? mod?.prefix ?? null;
-    const prefix = overridePath !== null ? String(overridePath) : routesPath;
-
-    if (prefix && prefix !== '/') {
-      const router = express.Router();
-      await fn({ app: router as any, engine: args.engine });
-      args.app.use(prefix, router);
+    
+    let mountPath: string;
+    if (overridePath !== null) {
+      mountPath = String(overridePath);
     } else {
-      await fn({ app: args.app, engine: args.engine });
+      const relativePath = resolveRoutePath(filePath, routesDir);
+      // Remove the dynamic segment from the mountPath, it will be handled by the router itself.
+      const baseMountPath = relativePath.replace(/\/:[^/]+$/, '');
+      mountPath = defaultPrefix === '/' ? baseMountPath : `${defaultPrefix}${baseMountPath}`;
     }
+
+    const globalBasePath = args.engine.config.http?.basePath ?? '';
+    mountPath = `${globalBasePath}${mountPath}`;
+    
+    // Clean up double slashes
+    mountPath = mountPath.replace(/\/+/g, '/');
+    // Ensure starts with /
+    if (!mountPath.startsWith('/')) mountPath = '/' + mountPath;
+    // Don't end with / if not root
+    if (mountPath.endsWith('/') && mountPath.length > 1) mountPath = mountPath.slice(0, -1);
+    
+    const router = express.Router();
+    await fn({ app: router as any, engine: args.engine });
+    args.app.use(mountPath, router);
   }
 }
