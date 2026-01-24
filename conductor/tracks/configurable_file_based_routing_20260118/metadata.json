@@ -1,0 +1,8 @@
+{
+  "track_id": "configurable_file_based_routing_20260118",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-01-18T13:10:00Z",
+  "updated_at": "2026-01-18T13:10:00Z",
+  "description": "The crud APIs to b rolling (no versioning) All routes including crud and custom routes should have \"/api\" (by default but overrideable), admin routes should be \"/setup\" prefix (also configurable). base path can be overriden on per-route basis using export path, custom routes should use file based routing like (next.JS routing)"
+}
