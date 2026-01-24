@@ -1,6 +1,6 @@
 # Implementation Plan: System Observability & Structured Logging
 
-## Phase 1: Core Logging & Context Infrastructure [checkpoint: 4152d6a]
+## Phase 1: Core Logging & Context Infrastructure [checkpoint: 507c4a8]
 - [x] Task: Define Logger interface and Context storage in `@enginehq/core`. 65e9c10
     - [x] Create `Logger` interface in `core/src/observability/types.ts`.
     - [x] Implement `RequestContext` using `AsyncLocalStorage` to store `traceId`.
@@ -9,7 +9,7 @@
     - [x] Integrate the logger into the `Engine` container.
 - [x] Task: Write unit tests for context propagation. 65e9c10
     - [x] Verify that logs correctly pick up the `traceId` from the `AsyncLocalStorage`.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Core Logging & Context Infrastructure' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Core Logging & Context Infrastructure' (Protocol in workflow.md) [checkpoint: 507c4a8]
 
 ## Phase 2: HTTP & Express Integration
 - [ ] Task: Implement Observability Middleware in `@enginehq/express`.
