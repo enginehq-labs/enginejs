@@ -8,8 +8,13 @@ export type WorkflowsConfig = {
   db?: { modelKey?: string };
 };
 
+export type LoggingConfig = {
+  level?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+};
+
 export type EngineConfig = {
   app: { name: string; env: 'development' | 'test' | 'staging' | 'production' };
+  logging?: LoggingConfig;
   http?: {
     basePath?: string;
     crudPath?: string;

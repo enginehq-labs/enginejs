@@ -25,6 +25,7 @@ import { MigrationRunner } from '../migrations/runner.js';
 import { WorkflowOutboxMaintenance } from '../workflows/maintenance.js';
 import { CrudService } from '../crud/service.js';
 import { normalizeWorkflowsConfig, SequelizeWorkflowRegistryLoader } from '../workflows/registryDb.js';
+import { LogManager } from '../observability/logManager.js';
 
 function getModelSpecFromDsl(dsl: unknown, modelKey: string): DslModelSpec | null {
   if (!dsl || typeof dsl !== 'object') return null;
@@ -33,21 +34,13 @@ function getModelSpecFromDsl(dsl: unknown, modelKey: string): DslModelSpec | nul
   return spec as DslModelSpec;
 }
 
-function createLogger() {
-  return {
-    info: (...args: any[]) => console.log(...args),
-    warn: (...args: any[]) => console.warn(...args),
-    error: (...args: any[]) => console.error(...args),
-    debug: (...args: any[]) => console.debug(...args),
-  };
-}
-
 export function createEngine(config: EngineConfig): EngineRuntime {
   const services = new DefaultServiceRegistry(config);
   const plugins: EnginePlugin[] = [];
   const pipelines = new DefaultPipelineRegistry();
   const workflows = new DefaultWorkflowRegistry();
   const wfCfg = normalizeWorkflowsConfig(config.workflows as any);
+  const logger = LogManager.createLogger({ level: config.logging?.level });
 
   let compiled: CompiledDsl | null = null;
   let orm: OrmInitResult | null = null;
@@ -55,7 +48,7 @@ export function createEngine(config: EngineConfig): EngineRuntime {
 
   services.register('config', 'singleton', () => config);
   services.register('services', 'singleton', () => services);
-  services.register('logger', 'singleton', () => createLogger());
+  services.register('logger', 'singleton', () => logger);
   services.register('pipelines', 'singleton', () => pipelines);
   services.register('workflows', 'singleton', () => workflows);
   services.register('dsl', 'singleton', () => {
@@ -215,6 +208,7 @@ export function createEngine(config: EngineConfig): EngineRuntime {
   const runtime: EngineRuntime = {
     config,
     services,
+    logger,
     dsl: null,
     orm: null,
     registerPlugin,

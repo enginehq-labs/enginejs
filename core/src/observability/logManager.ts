@@ -7,8 +7,8 @@ import { RequestContext } from './context.js';
 const pino = (pinoModule.default || pinoModule) as unknown as typeof pinoModule.default;
 
 export interface LogManagerOptions {
-  level?: string;
-  stream?: { write(msg: string): void };
+  level?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | undefined;
+  stream?: { write(msg: string): void } | undefined;
 }
 
 export class LogManager {
