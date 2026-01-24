@@ -11,3 +11,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Configurable & File-Based Routing**
 *Link: [./conductor/tracks/configurable_file_based_routing_20260118/](./conductor/tracks/configurable_file_based_routing_20260118/)*
+
+---
+
+- [~] **Track: System Observability & Structured Logging**
+*Link: [./conductor/tracks/system_observability_20260124/](./conductor/tracks/system_observability_20260124/)*
