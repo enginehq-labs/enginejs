@@ -1,9 +1,13 @@
 import assert from 'node:assert';
 import test from 'node:test';
 import http from 'node:http';
-import { createEngine } from '../../../../core/src/index.ts';
 import { createEngineExpressApp } from '../../../../express/src/index.ts';
-import registerRedirectRoutes from '../../routes/redirect.ts';
+import { autoloadRoutes } from '../../../../enginehq/src/runtime/autoload.ts';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function listen(app: any) {
   const server = http.createServer(app);
@@ -44,9 +48,8 @@ test('Pipeline: recordClick creates AnalyticsEvent', async () => {
         auth: { jwt: { accessSecret: 'x', accessTtl: '1h' }, sessions: { enabled: false } },
         acl: {},
         rls: { subjects: {}, policies: {} },
-        http: { port: 3000 }
-    };
-    
+        http: { routesPath: '/api' }
+    };    
     const engine: any = {
         config,
         dsl,
@@ -121,7 +124,7 @@ test('Pipeline: recordClick creates AnalyticsEvent', async () => {
                     primaryKeyAttributes: ['id'],
                     findOne: async (opts: any) => {
                         if (opts.where.slug === 'test-slug') {
-                            return { get: () => ({ id: 1, url: 'https://example.com' }) };
+                            return { get: () => ({ url: 'https://example.com' }) };
                         }
                         return null;
                     }
@@ -130,12 +133,13 @@ test('Pipeline: recordClick creates AnalyticsEvent', async () => {
         }
     };
 
-    const app = createEngineExpressApp(engine);
-    await registerRedirectRoutes({ app, engine });
+    const app = await createEngineExpressApp(engine);
+    const cwd = path.resolve(__dirname, '../../');
+    await autoloadRoutes({ cwd, routesDir: 'routes', app, engine });
 
     const { server, url } = await listen(app);
     try {
-        await fetch(`${url}/r/test-slug`, { redirect: 'manual' });
+        await fetch(`${url}/api/r/test-slug`, { redirect: 'manual' });
         assert.ok(analyticsCreated, 'AnalyticsEvent should be created via pipeline');
         assert.ok(httpContextFound, 'http.context should be passed to the pipeline');
     } finally {

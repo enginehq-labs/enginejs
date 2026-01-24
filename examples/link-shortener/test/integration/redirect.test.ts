@@ -1,9 +1,14 @@
 import assert from 'node:assert';
 import test from 'node:test';
 import http from 'node:http';
-import { createEngine } from '../../../../core/src/index.ts';
 import { createEngineExpressApp } from '../../../../express/src/index.ts';
-import registerRedirectRoutes from '../../routes/redirect.ts';
+import { autoloadRoutes } from '../../../../enginehq/src/runtime/autoload.ts';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function listen(app: any) {
   const server = http.createServer(app);
@@ -16,7 +21,7 @@ function listen(app: any) {
   });
 }
 
-test('Redirection: /r/:slug redirects to URL', async () => {
+test('Redirection: /api/r/:slug redirects to URL', async () => {
     // Mock Engine
     const dsl: any = { 
         link: { 
@@ -25,7 +30,7 @@ test('Redirection: /r/:slug redirects to URL', async () => {
                 slug: { type: 'string', unique: true },
                 url: { type: 'string' }
             }
-        } 
+        }
     };
     const config: any = {
         app: { name: 'link-shortener', env: 'test' },
@@ -34,9 +39,8 @@ test('Redirection: /r/:slug redirects to URL', async () => {
         auth: { jwt: { accessSecret: 'x', accessTtl: '1h' }, sessions: { enabled: false } },
         acl: {},
         rls: { subjects: {}, policies: {} },
-        http: { port: 3000 }
-    };
-    
+        http: { routesPath: '/api' }
+    };    
     const engine: any = {
         config,
         dsl,
@@ -63,7 +67,7 @@ test('Redirection: /r/:slug redirects to URL', async () => {
                 };
             }
             return {};
-          } 
+          }
         },
         orm: {
             sequelize: { Sequelize: { Op: {} } },
@@ -81,16 +85,22 @@ test('Redirection: /r/:slug redirects to URL', async () => {
         }
     };
 
-    const app = createEngineExpressApp(engine);
-    await registerRedirectRoutes({ app, engine });
+    const app = await createEngineExpressApp(engine);
+    const cwd = path.resolve(__dirname, '../../');
+    await autoloadRoutes({ cwd, routesDir: 'routes', app, engine });
 
     const { server, url } = await listen(app);
     try {
-        const res = await fetch(`${url}/r/test-slug`, { redirect: 'manual' });
+        const fetchUrl = `${url}/api/r/test-slug`;
+        const res = await fetch(fetchUrl, { redirect: 'manual' });
+        if (res.status !== 302) {
+            console.error(`Expected 302, got ${res.status} for URL: ${fetchUrl}`);
+            console.error('Response body:', await res.text());
+        }
         assert.equal(res.status, 302);
         assert.equal(res.headers.get('location'), 'https://example.com');
         
-        const res404 = await fetch(`${url}/r/unknown`, { redirect: 'manual' });
+        const res404 = await fetch(`${url}/api/r/unknown`, { redirect: 'manual' });
         assert.equal(res404.status, 404);
     } finally {
         server.close();

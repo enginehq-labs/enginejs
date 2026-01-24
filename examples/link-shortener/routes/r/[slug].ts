@@ -2,7 +2,7 @@ import type { Express } from 'express';
 import type { EngineRuntime, CrudService } from '@enginehq/core';
 
 export default async function registerRedirectRoutes({ app, engine }: { app: Express, engine: EngineRuntime }) {
-    app.get('/r/:slug', async (req, res) => {
+    app.get('/:slug', async (req, res) => {
         const { slug } = req.params;
         const crud = engine.services.resolve<CrudService>('crudService', { scope: 'singleton' });
         
@@ -41,8 +41,7 @@ export default async function registerRedirectRoutes({ app, engine }: { app: Exp
                 id: link.id,
                 actor: (req as any).actor,
                 options: {
-                    services: servicesProvider,
-                    bypassAclRls: true
+                    services: servicesProvider
                 }
             });
 
@@ -51,7 +50,7 @@ export default async function registerRedirectRoutes({ app, engine }: { app: Exp
         } catch (e: any) {
             console.error('[redirect] error', e);
             const status = e.name === 'CrudNotFoundError' ? 404 : (e.code || 500);
-            return res.status(status).json({ success: false, message: e.message || 'Internal server error' });
+            return res.status(status).json({ success: false, message: 'Internal server error' });
         }
     });
 }
