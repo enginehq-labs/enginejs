@@ -28,10 +28,11 @@
     - [x] Ensure workflow logs include the original `traceId`.
 - [x] Task: Instrument Sequelize queries. 980b343
     - [x] Add a Sequelize `beforeFind`, `beforeCreate`, etc., hook to inject the `traceId` as a SQL comment.
-- [~] Task: Write tests for end-to-end tracing.
-    - [ ] Create a test case: HTTP Request -> Database Write -> Workflow Trigger -> Workflow Log.
-    - [ ] Verify all logs share the same `traceId`.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Deep Instrumentation (Workflows & DB)' (Protocol in workflow.md)
+- [x] Task: Write tests for end-to-end tracing. ec7540f
+    - [x] Create a test case: HTTP Request -> Database Write -> Workflow Trigger -> Workflow Log.
+    - [x] Verify all logs share the same `traceId`.
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Deep Instrumentation (Workflows & DB)' (Protocol in workflow.md) ec7540f
+
 
 ## Phase 4: Finalization & Documentation
 - [ ] Task: Documentation update.
