@@ -40,7 +40,10 @@ export function createEngine(config: EngineConfig): EngineRuntime {
   const pipelines = new DefaultPipelineRegistry();
   const workflows = new DefaultWorkflowRegistry();
   const wfCfg = normalizeWorkflowsConfig(config.workflows as any);
-  const logger = LogManager.createLogger({ level: config.logging?.level });
+  const logger = LogManager.createLogger({
+    level: config.logging?.level || (config.app?.env === 'development' ? 'debug' : 'info'),
+    pretty: config.app?.env === 'development',
+  });
 
   let compiled: CompiledDsl | null = null;
   let orm: OrmInitResult | null = null;

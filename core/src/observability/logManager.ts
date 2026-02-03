@@ -9,6 +9,7 @@ const pino = (pinoModule.default || pinoModule) as unknown as typeof pinoModule.
 export interface LogManagerOptions {
   level?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | undefined;
   stream?: { write(msg: string): void } | undefined;
+  pretty?: boolean;
 }
 
 export class LogManager {
@@ -22,6 +23,17 @@ export class LogManager {
       // Ensure we don't have base fields that might conflict
       base: null,
     };
+
+    if (options.pretty) {
+      (pinoOptions as any).transport = {
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          translateTime: 'SYS:standard',
+          ignore: 'pid,hostname',
+        },
+      };
+    }
 
     const pinoInstance = options.stream 
       ? (pino as any)(pinoOptions, options.stream as any)
