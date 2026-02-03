@@ -22,6 +22,10 @@ export class DefaultServiceRegistry implements ServiceRegistry {
     this.registrations.set(name, { scope, factory });
   }
 
+  unregister(name: string): void {
+    this.registrations.delete(name);
+  }
+
   resolve<T>(name: string, ctx: ResolveCtx): T {
     const reg = this.registrations.get(name);
     if (!reg) throw new Error(`Unknown service: ${name}`);

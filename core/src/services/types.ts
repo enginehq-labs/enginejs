@@ -10,6 +10,7 @@ export type ResolveCtx = {
 
 export interface ServiceRegistry {
   register<T>(name: string, scope: ServiceScope, factory: (ctx: ServiceFactoryCtx) => T): void;
+  unregister(name: string): void;
   resolve<T>(name: string, ctx: ResolveCtx): T;
   has(name: string): boolean;
 }

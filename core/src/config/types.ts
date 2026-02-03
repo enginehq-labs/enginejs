@@ -23,7 +23,7 @@ export type EngineConfig = {
     trustProxy?: boolean;
     hideExistence?: boolean;
   };
-  db: { url: string; dialect?: 'postgres' };
+  db: { url: string; dialect?: 'postgres'; logging?: (sql: string) => void };
   dsl: {
     schemaPath?: string;
     schema?: Record<string, unknown>;

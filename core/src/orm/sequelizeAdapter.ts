@@ -69,6 +69,7 @@ export function initSequelizeModelsFromDsl(sequelize: Sequelize, dsl: DslRoot): 
   sequelize.addHook('beforeBulkCreate', addTraceId);
   sequelize.addHook('beforeBulkUpdate', addTraceId);
   sequelize.addHook('beforeBulkDestroy', addTraceId);
+  (sequelize as any).addHook('beforeQuery', addTraceId);
 
   const models: Record<string, ModelStatic<Model>> = {};
   const junctionModels: Record<string, ModelStatic<Model>> = {};

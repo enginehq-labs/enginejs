@@ -191,7 +191,7 @@ export function createEngine(config: EngineConfig): EngineRuntime {
     }
 
     const dialect = config.db.dialect || 'postgres';
-    sequelize = new Sequelize(config.db.url, { logging: false, dialect: dialect as any });
+    sequelize = new Sequelize(config.db.url, { logging: config.db.logging ?? false, dialect: dialect as any });
     orm = initSequelizeModelsFromDsl(sequelize, compiled.dsl);
     runtime.dsl = compiled.dsl as DslRoot;
     runtime.orm = orm;
