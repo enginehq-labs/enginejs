@@ -35,9 +35,9 @@
 
 
 ## Phase 4: Finalization & Documentation
-- [ ] Task: Documentation update.
-    - [ ] Document the new `Logger` API in `conductor/framework/observability.md`.
-    - [ ] Provide examples of manual logging within custom routes.
-- [ ] Task: CLI log formatting.
-    - [ ] Ensure `enginehq dev` provides a way to see "pretty" logs while maintaining JSON output.
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Finalization & Documentation' (Protocol in workflow.md)
+- [x] Task: Documentation update. 37b05af
+    - [x] Document the new `Logger` API in `conductor/framework/observability.md`.
+    - [x] Provide examples of manual logging within custom routes.
+- [x] Task: CLI log formatting. 0ae9637
+    - [x] Ensure `enginehq dev` provides a way to see "pretty" logs while maintaining JSON output.
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Finalization & Documentation' (Protocol in workflow.md) 0ae9637
