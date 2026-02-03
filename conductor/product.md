@@ -11,6 +11,7 @@ EngineJS aims to revolutionize backend development by providing a robust framewo
 # Core Features
 - **Schema-as-Code DSL:** A robust domain-specific language for defining models, access control lists (ACL), and row-level security (RLS) directly in code.
 - **Durable Workflows:** Built-in support for complex workflows utilizing the outbox pattern and retention management to ensure data integrity and reliability.
+- **Structured Observability:** End-to-end request tracing and structured JSON logging across HTTP, services, workflows, and database layers.
 - **Pluggable Pipelines:** A flexible architecture for creating transforms, validators, and plugins, allowing for highly customizable request processing.
 
 # Goals

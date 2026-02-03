@@ -6,6 +6,7 @@
 - **Backend Framework:** Express (v4.21.2)
 - **ORM:** Sequelize (v6.37.7)
 - **Database:** PostgreSQL (using `pg` v8.16.3 driver)
+- **Logging:** Pino (v7.11.0) with pino-pretty for development
 
 ## Monorepo Architecture
 - **Workspaces:** `@enginehq/core`, `@enginehq/auth`, `@enginehq/express`, `enginehq`
