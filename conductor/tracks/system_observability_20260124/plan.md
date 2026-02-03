@@ -12,14 +12,15 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Core Logging & Context Infrastructure' (Protocol in workflow.md) [checkpoint: 507c4a8]
 
 ## Phase 2: HTTP & Express Integration
-- [ ] Task: Implement Observability Middleware in `@enginehq/express`.
-    - [ ] Create middleware to generate `traceId` (if missing) and set up the `RequestContext`.
-    - [ ] Implement request/response logging (status, latency, path).
-- [ ] Task: Integrate middleware into Express bootstrap.
-    - [ ] Update `createExpressApp` to mount the observability middleware as early as possible.
-- [ ] Task: Write integration tests for HTTP tracing.
-    - [ ] Verify that multiple concurrent requests receive unique `traceId`s and log correctly.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: HTTP & Express Integration' (Protocol in workflow.md)
+- [x] Task: Implement Observability Middleware in `@enginehq/express`. 83c2147
+    - [x] Create middleware to generate `traceId` (if missing) and set up the `RequestContext`.
+    - [x] Implement request/response logging (status, latency, path).
+- [x] Task: Integrate middleware into Express bootstrap. 83c2147
+    - [x] Update `createExpressApp` to mount the observability middleware as early as possible.
+- [x] Task: Write integration tests for HTTP tracing. 83c2147
+    - [x] Verify that multiple concurrent requests receive unique `traceId`s and log correctly.
+- [x] Task: Conductor - User Manual Verification 'Phase 2: HTTP & Express Integration' (Protocol in workflow.md) 83c2147
+
 
 ## Phase 3: Deep Instrumentation (Workflows & DB)
 - [ ] Task: Instrument Workflow execution.
