@@ -177,6 +177,7 @@ export default {
           origin_chain: { type: 'jsonb' },
           parent_event_id: { type: 'string' },
           actor: { type: 'jsonb' },
+          trace_id: { type: 'string' },
           status: { type: 'string', default: 'pending' },
           attempts: { type: 'int', default: 0 },
           next_run_at: { type: 'datetime' },

@@ -1,4 +1,5 @@
 import type { Actor } from '../actors/types.js';
+import { RequestContext } from '../observability/context.js';
 import type { WorkflowOutboxStore } from './outbox.js';
 import type { WorkflowEventAction, WorkflowOutboxEvent } from './types.js';
 
@@ -51,6 +52,7 @@ export class WorkflowEngine {
       ...(args.origin ? { origin: args.origin } : {}),
       ...(args.originChain ? { originChain: args.originChain } : {}),
       ...(args.parentEventId != null ? { parentEventId: args.parentEventId } : {}),
+      ...(RequestContext.getTraceId() ? { traceId: RequestContext.getTraceId()! } : {}),
       ...(actor ? { actor } : {}),
       status: 'pending',
       attempts: 0,

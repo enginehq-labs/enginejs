@@ -1,4 +1,5 @@
 import { Op, type Model, type ModelStatic, type Sequelize } from 'sequelize';
+import { RequestContext } from '../observability/context.js';
 
 import type { Actor } from '../actors/types.js';
 import type { EngineConfig } from '../config/types.js';
@@ -11,12 +12,7 @@ import type { WorkflowSpec, WorkflowStep, WorkflowValue } from './spec.js';
 import type { RlsWhere } from '../rls/where.js';
 import { rlsWhereToSequelize } from '../rls/toSequelizeWhere.js';
 import { CrudService } from '../crud/service.js';
-
-type Logger = {
-  info: (...args: any[]) => void;
-  warn: (...args: any[]) => void;
-  error: (...args: any[]) => void;
-};
+import type { Logger } from '../observability/types.js';
 
 class WorkflowNonRetryableError extends Error {
   readonly nonRetryable = true;
@@ -228,6 +224,7 @@ export class WorkflowRunner {
       origin: row.origin ?? undefined,
       originChain: row.origin_chain ?? row.originChain ?? undefined,
       parentEventId: row.parent_event_id ?? row.parentEventId ?? undefined,
+      traceId: row.trace_id ?? row.traceId ?? undefined,
       actor: row.actor ?? undefined,
       status: String(row.status || 'pending') as WorkflowOutboxStatus,
       attempts: Number(row.attempts || 0),
@@ -247,7 +244,7 @@ export class WorkflowRunner {
 
   private async runStep(step: WorkflowStep, ctx: { event: WorkflowOutboxEvent; actor: Actor }): Promise<void> {
     if (step.op === 'log') {
-      this.deps.logger.info('[workflow]', step.message);
+      this.deps.logger.info(`[workflow] ${step.message}`);
       return;
     }
 
@@ -433,7 +430,10 @@ export class WorkflowRunner {
       const maxDelayMs = opts.maxDelayMs ?? 60_000;
 
       try {
-        await this.executeEvent(evt, opts);
+        const traceId = evt.traceId || `wf-${evt.id}`;
+        await RequestContext.run(traceId, async () => {
+          await this.executeEvent(evt, opts);
+        });
         processed++;
       } catch (e) {
         const attempts = (evt.attempts ?? 0) + 1;

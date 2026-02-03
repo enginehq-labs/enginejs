@@ -15,6 +15,7 @@ export type WorkflowOutboxEvent = {
   origin?: string;
   originChain?: string[];
   parentEventId?: string | number;
+  traceId?: string;
   actor?: Pick<Actor, 'isAuthenticated' | 'subjects' | 'roles' | 'claims' | 'sessionId'>;
 
   status: WorkflowOutboxStatus;

@@ -33,6 +33,7 @@ export class SequelizeWorkflowOutboxStore implements WorkflowOutboxStore {
       origin: evt.origin,
       origin_chain: evt.originChain,
       parent_event_id: evt.parentEventId,
+      trace_id: evt.traceId,
       actor: evt.actor,
       status: evt.status,
       attempts: evt.attempts,
