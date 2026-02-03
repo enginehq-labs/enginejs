@@ -1,4 +1,5 @@
 import { DataTypes, type Model, type ModelStatic, type Sequelize } from 'sequelize';
+import { RequestContext } from '../observability/context.js';
 
 import type { DslRoot } from '../dsl/types.js';
 import { isDslModelSpec } from '../dsl/types.js';
@@ -53,6 +54,22 @@ function isStringType(type: unknown) {
 }
 
 export function initSequelizeModelsFromDsl(sequelize: Sequelize, dsl: DslRoot): OrmInitResult {
+  // Add observability hooks
+  const addTraceId = (options: any) => {
+    const traceId = RequestContext.getTraceId();
+    if (traceId) {
+      options.comment = options.comment ? `${options.comment}, traceId=${traceId}` : `traceId=${traceId}`;
+    }
+  };
+
+  sequelize.addHook('beforeFind', addTraceId);
+  sequelize.addHook('beforeCreate', addTraceId);
+  sequelize.addHook('beforeUpdate', addTraceId);
+  sequelize.addHook('beforeDestroy', addTraceId);
+  sequelize.addHook('beforeBulkCreate', addTraceId);
+  sequelize.addHook('beforeBulkUpdate', addTraceId);
+  sequelize.addHook('beforeBulkDestroy', addTraceId);
+
   const models: Record<string, ModelStatic<Model>> = {};
   const junctionModels: Record<string, ModelStatic<Model>> = {};
 
