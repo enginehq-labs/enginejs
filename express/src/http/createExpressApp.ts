@@ -6,6 +6,8 @@ import type { Express } from 'express'; // Added import for Express
 import { actorMiddleware, type ActorResolver } from '../middleware/actor.js';
 import { responseEnvelope } from '../middleware/responseEnvelope.js';
 import { servicesMiddleware } from '../middleware/services.js';
+import { createObservabilityMiddleware } from './middleware/observability.js';
+import type { Logger } from '@enginehq/core';
 import { createAdminRouter } from '../routers/admin.js';
 import { createCrudRouter } from '../routers/crud.js';
 
@@ -26,6 +28,9 @@ export async function createExpressApp(opts: ExpressAppOptions) {
   const config = opts.getConfig();
   const adminPath = config.http?.adminPath ?? '/admin';
   const crudPath = config.http?.crudPath ?? '/api/crud';
+
+  const logger = opts.services.resolve<Logger>('logger', { scope: 'singleton' });
+  app.use(createObservabilityMiddleware({ logger }));
 
   app.use(express.json({ limit: '2mb' }));
   app.use(responseEnvelope);

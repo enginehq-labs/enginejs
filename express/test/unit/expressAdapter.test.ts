@@ -9,17 +9,64 @@ import { createExpressApp } from '../../src/http/createExpressApp.js';
 
 function listen(app: any) {
   const server = http.createServer(app);
-  return new Promise<{ server: http.Server; url: string }>((resolve, reject) => {
+  return new Promise<{ server: http.Server; url: string; close: () => void }>((resolve, reject) => {
     server.listen(0, '127.0.0.1', () => {
       const addr = server.address();
       if (!addr || typeof addr === 'string') return reject(new Error('No address'));
-      resolve({ server, url: `http://${addr.address}:${addr.port}` });
+      resolve({
+        server,
+        url: `http://${addr.address}:${addr.port}`,
+        close: () => {
+          if ('closeAllConnections' in server) {
+            (server as any).closeAllConnections();
+          }
+          server.close();
+        },
+      });
     });
+  });
+}
+
+function mockLogger(services: ServiceRegistry) {
+  services.register('logger', 'singleton', () => ({
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+    trace: () => {},
+    fatal: () => {},
+    child: () => services.resolve('logger', { scope: 'singleton' }),
+  }));
+}
+
+async function request(url: string, opts: any = {}) {
+  return new Promise<{ status: number; body: any }>((resolve, reject) => {
+    const reqOpts = {
+      method: opts.method || 'GET',
+      headers: opts.headers || {},
+    };
+    const req = http.request(url, reqOpts, (res) => {
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => {
+        try {
+          resolve({ status: res.statusCode || 0, body: data ? JSON.parse(data) : null });
+        } catch (e) {
+          reject(new Error(`Failed to parse response: ${data}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    if (opts.body) {
+      req.write(opts.body);
+    }
+    req.end();
   });
 }
 
 test('createExpressApp: provides res.ok/res.fail and /health', async () => {
   const services: ServiceRegistry = new DefaultServiceRegistry({});
+  mockLogger(services);
   const dsl: DslRoot = { customer: { fields: { id: { type: 'int' } } } } as any;
 
   const config: any = {
@@ -60,21 +107,21 @@ test('createExpressApp: provides res.ok/res.fail and /health', async () => {
     junctionModels: {},
   };
 
-  const app = createExpressApp({ services, getDsl: () => dsl, getOrm: () => orm, getConfig: () => config });
-  const { server, url } = await listen(app);
+  const app = await createExpressApp({ services, getDsl: () => dsl, getOrm: () => orm, getConfig: () => config });
+  const { url, close } = await listen(app);
   try {
-    const res = await fetch(`${url}/health`);
-    const body = (await res.json()) as any;
-    assert.equal(res.status, 200);
+    const { status, body } = await request(`${url}/health`);
+    assert.equal(status, 200);
     assert.equal(body.success, true);
     assert.deepEqual(body.data, { ok: true });
   } finally {
-    server.close();
+    close();
   }
 });
 
 test('createExpressApp: mounts CRUD skeleton and unknown model returns 404 envelope', async () => {
   const services: ServiceRegistry = new DefaultServiceRegistry({});
+  mockLogger(services);
   const dsl: DslRoot = { customer: { fields: { id: { type: 'int' } } } } as any;
 
   const config: any = {
@@ -95,21 +142,21 @@ test('createExpressApp: mounts CRUD skeleton and unknown model returns 404 envel
   };
   const orm: any = { sequelize: { Sequelize: fakeSeq, escape: (v: unknown) => String(v) }, dsl, models: {}, junctionModels: {} };
 
-  const app = createExpressApp({ services, getDsl: () => dsl, getOrm: () => orm, getConfig: () => config });
-  const { server, url } = await listen(app);
+  const app = await createExpressApp({ services, getDsl: () => dsl, getOrm: () => orm, getConfig: () => config });
+  const { url, close } = await listen(app);
   try {
-    const res = await fetch(`${url}/api/unknown`);
-    const body = (await res.json()) as any;
-    assert.equal(res.status, 404);
+    const { status, body } = await request(`${url}/api/crud/unknown`);
+    assert.equal(status, 404);
     assert.equal(body.success, false);
     assert.equal(body.code, 404);
   } finally {
-    server.close();
+    close();
   }
 });
 
 test('CRUD: list applies default filters and expands junction-backed multi-int to ID arrays when includeDepth=0', async () => {
   const services: ServiceRegistry = new DefaultServiceRegistry({});
+  mockLogger(services);
 
   const dsl: DslRoot = {
     tag: { fields: { id: { type: 'int', primary: true }, deleted: { type: 'boolean' }, archived: { type: 'boolean' }, auto_name: { type: 'string' } }, access: { read: ['admin'] } },
@@ -185,7 +232,7 @@ test('CRUD: list applies default filters and expands junction-backed multi-int t
     junctionModels: { post__tags__to__tag__id: joinModel },
   };
 
-  const app = createExpressApp({
+  const app = await createExpressApp({
     services,
     getDsl: () => dsl,
     getOrm: () => orm,
@@ -193,11 +240,10 @@ test('CRUD: list applies default filters and expands junction-backed multi-int t
     defaultActor: { isAuthenticated: true, subjects: {}, roles: ['admin'], claims: {} },
   });
 
-  const { server, url } = await listen(app);
+  const { url, close } = await listen(app);
   try {
-    const res = await fetch(`${url}/api/post`);
-    const body = (await res.json()) as any;
-    assert.equal(res.status, 200);
+    const { status, body } = await request(`${url}/api/crud/post`);
+    assert.equal(status, 200);
     assert.equal(body.success, true);
     assert.equal(body.pagination.totalCount, 2);
     assert.deepEqual(body.data, [
@@ -207,12 +253,13 @@ test('CRUD: list applies default filters and expands junction-backed multi-int t
     assert.ok(lastFindAll?.where, 'missing where');
     assert.ok(lastFindAll.where[Op.and], 'expected Op.and where');
   } finally {
-    server.close();
+    close();
   }
 });
 
 test('CRUD: hideExistence maps ACL deny on read to 404 when enabled', async () => {
   const services: ServiceRegistry = new DefaultServiceRegistry({});
+  mockLogger(services);
   const dsl: DslRoot = {
     post: { fields: { id: { type: 'int', primary: true }, deleted: { type: 'boolean' }, archived: { type: 'boolean' }, auto_name: { type: 'string' } }, access: { read: ['admin'] } },
   } as any;
@@ -235,7 +282,7 @@ test('CRUD: hideExistence maps ACL deny on read to 404 when enabled', async () =
     junctionModels: {},
   };
 
-  const app = createExpressApp({
+  const app = await createExpressApp({
     services,
     getDsl: () => dsl,
     getOrm: () => orm,
@@ -243,20 +290,20 @@ test('CRUD: hideExistence maps ACL deny on read to 404 when enabled', async () =
     defaultActor: { isAuthenticated: true, subjects: {}, roles: [], claims: {} },
   });
 
-  const { server, url } = await listen(app);
+  const { url, close } = await listen(app);
   try {
-    const res = await fetch(`${url}/api/post/1`);
-    const body = (await res.json()) as any;
-    assert.equal(res.status, 404);
+    const { status, body } = await request(`${url}/api/crud/post/1`);
+    assert.equal(status, 404);
     assert.equal(body.success, false);
     assert.equal(body.code, 404);
   } finally {
-    server.close();
+    close();
   }
 });
 
 test('CRUD: create enqueues workflow outbox event afterPersist when workflows enabled', async () => {
   const services: ServiceRegistry = new DefaultServiceRegistry({});
+  mockLogger(services);
   const dsl: DslRoot = {
     post: {
       fields: {
@@ -312,7 +359,7 @@ test('CRUD: create enqueues workflow outbox event afterPersist when workflows en
     junctionModels: {},
   };
 
-  const app = createExpressApp({
+  const app = await createExpressApp({
     services,
     getDsl: () => dsl,
     getOrm: () => orm,
@@ -320,15 +367,14 @@ test('CRUD: create enqueues workflow outbox event afterPersist when workflows en
     defaultActor: { isAuthenticated: true, subjects: {}, roles: ['admin'], claims: {} },
   });
 
-  const { server, url } = await listen(app);
+  const { url, close } = await listen(app);
   try {
-    const res = await fetch(`${url}/api/post`, {
+    const { status, body } = await request(`${url}/api/crud/post`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: '  Hello  ' }),
     });
-    const body = (await res.json()) as any;
-    assert.equal(res.status, 201);
+    assert.equal(status, 201);
     assert.equal(body.success, true);
     assert.deepEqual(createdRows, [{ title: 'Hello' }]);
     assert.equal(outboxRows.length, 1);
@@ -336,6 +382,6 @@ test('CRUD: create enqueues workflow outbox event afterPersist when workflows en
     assert.equal(outboxRows[0].action, 'create');
     assert.deepEqual(outboxRows[0].after, { id: 1, title: 'Hello' });
   } finally {
-    server.close();
+    close();
   }
 });
