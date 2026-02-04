@@ -1,5 +1,11 @@
 # AGENTS.md — EngineJS (Conductor-Driven Monorepo)
 
+## Runtime & Environment
+
+- **Strict Node.js Version:** This project strictly targets **Node.js 22+**. 
+- Always ensure you are using the correct version by running `nvm use 22` before executing any commands (tests, builds, etc.).
+- Do not use features or flags that are incompatible with Node.js 22.
+
 ## Source of truth
 
 This project uses [Conductor](https://github.com/gemini-cli-extensions/conductor) for development. The source of truth for the product vision, technical stack, and development workflow is the `conductor/` directory.

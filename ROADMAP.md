@@ -1,38 +1,50 @@
 # EngineJS Roadmap
 
-EngineJS is currently a **Technical Preview**. This roadmap is intentionally short and oriented around getting to a stable `1.0`.
+EngineJS is currently in **Technical Preview**. This roadmap outlines the path toward a stable `1.0.0` release, focusing on architectural integrity, developer ergonomics, and production-grade reliability.
 
-## 0.1.x (Technical Preview)
+## ✅ Completed (0.1.x Foundations)
 
-- Stabilize exported API surface for:
-  - DSL registry + ORM init + safe sync
-  - ACL/RLS (incl. `via` join scoping)
-  - pipelines + workflows/outbox runner/scheduler/replayer/retention
-- DB-backed workflow definitions (`workflow` meta model) + CLI seeding (`enginehq workflows sync`) so workflows can be UI-editable later.
-- Improve docs and examples.
-- Expand `CrudService` parity (read/update/delete, includeDepth, find, junction behaviors) and reduce duplication between core and HTTP.
+- **Schema-as-Code core:** DSL registry, ORM initialization, and safe schema synchronization.
+- **Security Engine:** Robust ACL and Row-Level Security (RLS) enforcement, including `via` join scoping.
+- **Durable Workflows:** Outbox-backed workflow engine with retry logic, scheduling, and retention management.
+- **Structured Observability:** Integrated `Logger` interface (Pino), request tracing (`traceId`), and database query instrumentation.
+- **File-Based Routing:** Recursive, convention-based routing for Express.
 
-## 0.2.x
+## 0.1.x (Stability & Refactoring)
 
-- Workflow management ergonomics:
-  - admin endpoints (list/create/update/enable/disable)
-  - validation error surfaces suitable for a UI editor
-  - import/export + basic audit/versioning strategy
-- Express-first auth helpers:
-  - optional DB-backed sessions (`auth_session`) with refresh rotation + revocation
-  - middleware + ergonomic `resolveActor` helpers
-- More built-in workflow steps:
-  - `crud.update`, `crud.read`
-  - `db.insert`, `db.delete` (scoped and audited)
+- **API Stabilization:** Finalize public exported surface for core modules to ensure long-term compatibility.
+- **Logic Consolidation:** Move shared CRUD utilities (payload pruning, field stripping, junction handling) from `@enginehq/express` to `@enginehq/core` to eliminate duplication.
+- **Node.js 22+ Enforcement:** Standardize monorepo scripts and enforce compatibility with Node.js 22+ (using `node:test` and latest ESM features).
+- **Refine Routing Ergonomics:** Formalize file-based routing behavior for dynamic segments and nested middleware.
+- **Expanded `CrudService` Parity:** Ensure full feature parity between internal service calls and HTTP endpoints (includeDepth, complex filters, junction behaviors).
+- **Improved CLI UX:** Better error reporting for `enginehq sync` and interactive prompts for `enginehq init`.
+- **Reference Examples:** Complete the Link Shortener example and add a multi-tenant SaaS starter template.
 
-## 0.3.x
+## 0.2.x (Ergonomics & Extensions)
 
-- Observability hooks:
-  - structured logger interface
-  - metrics/events around CRUD, pipeline phases, workflow execution, retries
-- Better migration ergonomics (runner UX and CLI patterns).
+- **Workflow Management UI Foundations:**
+  - Admin endpoints for real-time workflow management (list, update, enable/disable).
+  - Validation error surfaces optimized for a future UI-based workflow editor.
+  - Import/export capabilities for workflow definitions.
+- **Auth Service Enhancements:**
+  - Standardized DB-backed session management (`auth_session`) with refresh rotation and revocation.
+  - Ergonomic `resolveActor` helpers for common auth patterns (JWT, Session, API Key).
+- **Advanced Pipeline & Workflow Ops:**
+  - More built-in workflow steps: `crud.update`, `crud.read`, `db.delete` (scoped/audited).
+  - Pluggable validation and transform libraries.
 
-## 1.0.0
+## 0.3.x (Production Readiness)
 
-- Versioned, documented public API stability guarantees.
-- Compatibility/migration guides for selected reference apps.
+- **Enhanced Observability:**
+  - OpenTelemetry (OTEL) integration for distributed tracing.
+  - Performance metrics (Prometheus/Grafana) for CRUD latency and workflow throughput.
+- **Migration Ergonomics:**
+  - Support for zero-downtime migrations.
+  - Safe rollback patterns and migration audit logs.
+- **Multi-Dialect Support:** Official verification and testing for SQLite, MySQL, and MSSQL (beyond PostgreSQL).
+
+## 1.0.0 (General Availability)
+
+- **Stability Guarantees:** Strict SemVer enforcement and long-term support (LTS) policy.
+- **Comprehensive Documentation:** Full API reference, architectural deep-dives, and best practices guides.
+- **Production-Ready Ecosystem:** A collection of stable plugins for standard needs (file storage, email, background jobs).
