@@ -16,3 +16,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ## [x] Track: System Observability & Structured Logging
 *Link: [./conductor/tracks/system_observability_20260124/](./conductor/tracks/system_observability_20260124/)*
+
+---
+
+## [ ] Track: CRUD Logic Consolidation & Feature Parity
+*Link: [./conductor/tracks/crud_logic_consolidation_20260204/](./conductor/tracks/crud_logic_consolidation_20260204/)*
