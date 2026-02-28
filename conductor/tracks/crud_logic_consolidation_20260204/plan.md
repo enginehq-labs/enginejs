@@ -12,15 +12,15 @@
 
 ## Phase 2: CrudService Feature Parity
 
-- [ ] Task: Implement recursive expansion (`includeDepth`) in `CrudService`.
-  - [ ] Write unit tests for `includeDepth` in `core/test/unit/crud/service.test.ts`.
-  - [ ] Implement expansion logic in `read` and `list` methods.
-- [ ] Task: Support complex filtering in `CrudService`.
-  - [ ] Write unit tests for nested AND/OR and junction-based filters.
-  - [ ] Implement filter parsing and application in `list` method.
-- [ ] Task: Implement atomic junction updates.
-  - [ ] Ensure `multi` field updates use Sequelize transactions correctly within the service.
-  - [ ] Verify atomicity with unit tests.
+- [x] Task: Implement recursive expansion (`includeDepth`) in `CrudService`. ... 4c7fde7
+  - [x] Write unit tests for `includeDepth` in `core/test/unit/crud/service.test.ts`. ... 4c7fde7
+  - [x] Implement expansion logic in `read` and `list` methods. ... 4c7fde7
+- [x] Task: Support complex filtering in `CrudService`. ... 4c7fde7
+  - [x] Write unit tests for nested AND/OR and junction-based filters. ... 4c7fde7
+  - [x] Implement filter parsing and application in `list` method. ... 4c7fde7
+- [x] Task: Implement atomic junction updates. ... 4c7fde7
+  - [x] Ensure `multi` field updates use Sequelize transactions correctly within the service. ... 4c7fde7
+  - [x] Verify atomicity with unit tests. ... 4c7fde7
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: CrudService Feature Parity' (Protocol in workflow.md)
 
 ## Phase 3: Express Router Refactoring
