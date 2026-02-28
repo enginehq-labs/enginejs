@@ -21,15 +21,17 @@
 - [x] Task: Implement atomic junction updates. ... 4c7fde7
   - [x] Ensure `multi` field updates use Sequelize transactions correctly within the service. ... 4c7fde7
   - [x] Verify atomicity with unit tests. ... 4c7fde7
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: CrudService Feature Parity' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: CrudService Feature Parity' (Protocol in workflow.md)
+      [checkpoint: 4c7fde7]
 
 ## Phase 3: Express Router Refactoring
 
-- [ ] Task: Refactor Express CRUD router to use `CrudService`.
-  - [ ] Remove duplicated payload processing logic from `express/src/routers/crud.ts`.
-  - [ ] Delegate all CRUD operations to `CrudService`.
-- [ ] Task: Verify backward compatibility.
-  - [ ] Run existing `express` integration tests to ensure no regressions in the HTTP API.
+- [x] Task: Integrate `@enginehq/core/crud/utils` in `@enginehq/express`.
+  - [x] Update `express/src/routers/crud.ts` to use imported utilities.
+  - [x] Remove redundant inline filtering and payload processing logic from `express/src/routers/crud.ts`.
+  - [x] Delegate all CRUD operations to `CrudService`. f0de626
+- [x] Task: Verify backward compatibility. f0de626
+  - [x] Run existing `express` integration tests to ensure no regressions in the HTTP API. f0de626
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Express Router Refactoring' (Protocol in workflow.md)
 
 ## Phase 4: Integration & Documentation
