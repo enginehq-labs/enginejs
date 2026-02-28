@@ -24,7 +24,7 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 2: CrudService Feature Parity' (Protocol in workflow.md)
       [checkpoint: 4c7fde7]
 
-## Phase 3: Express Router Refactoring
+## Phase 3: Express Router Refactoring [checkpoint: b377a76]
 
 - [x] Task: Integrate `@enginehq/core/crud/utils` in `@enginehq/express`.
   - [x] Update `express/src/routers/crud.ts` to use imported utilities.
@@ -32,7 +32,7 @@
   - [x] Delegate all CRUD operations to `CrudService`. f0de626
 - [x] Task: Verify backward compatibility. f0de626
   - [x] Run existing `express` integration tests to ensure no regressions in the HTTP API. f0de626
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Express Router Refactoring' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Express Router Refactoring' (Protocol in workflow.md) [checkpoint: b377a76]
 
 ## Phase 4: Integration & Documentation
 
