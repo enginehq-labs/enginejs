@@ -22,10 +22,8 @@ import { stripVirtualFields, pruneUnknownPayload, normalizePayloadMultiFields } 
 
 function getSequelizeLib(orm: OrmInitResult) {
   const Seq = (orm.sequelize as any).Sequelize ?? (orm.sequelize as any).constructor;
-  const Op = (Seq as any).Op;
-  return {
-    Op,
-  };
+  const { Op, where, fn, col, literal } = Seq as any;
+  return { Op, where, fn, col, literal };
 }
 
 function getPrimaryKeyField(model: ModelStatic<Model>): string {
@@ -279,36 +277,108 @@ function getModel(orm: OrmInitResult, modelKey: string): ModelStatic<Model> {
   return m;
 }
 
-function filtersToWhere(ast: ListQueryAst, orm: OrmInitResult, model: ModelStatic<Model>): any {
+
+
+// We will implement local helpers
+function isJunctionIntFkField(f: any): boolean {
+  if (!f || typeof f !== 'object') return false;
+  return f.type === 'int' && f.multi === true && !!f.source && !!f.sourceid;
+}
+function isStringArrayField(f: any): boolean {
+  if (!f || typeof f !== 'object') return false;
+  return f.type === 'string' && f.multi === true && !f.source;
+}
+function isVirtualField(f: any): boolean {
+  return f?.virtual === true;
+}
+
+function buildFilterExpr({
+  orm,
+  modelKey,
+  model,
+  spec,
+  field,
+  expr,
+}: {
+  orm: OrmInitResult;
+  modelKey: string;
+  model: any;
+  spec: DslModelSpec;
+  field: string;
+  expr: any;
+}): any {
+  const { Op, where, fn, col, literal } = getSequelizeLib(orm);
+  const f = spec.fields?.[field] as any;
+  if (!f || isVirtualField(f)) return null;
+
+  if (isJunctionIntFkField(f)) {
+    const joinName = `${modelKey}__${field}__to__${String(f.source)}__${String(f.sourceid)}`;
+    const joinModel = (orm.models as any)[joinName];
+    if (!joinModel) throw new CrudBadRequestError(`Missing junction model for field: ${modelKey}.${field}`);
+    const pk = getPrimaryKeyField(model);
+    const ownerIdCol = `${modelKey}Id`;
+    const sourceIdCol = `${String(f.source)}Id`;
+
+    const v = expr.value;
+    const escaped = (orm.sequelize as any).escape(v);
+    const sub = `SELECT "${ownerIdCol}" FROM "${joinName}" WHERE "${sourceIdCol}" = ${escaped} AND "deleted" = false AND "archived" = false`;
+
+    if (expr.op === 'ne') return { [pk]: { [Op.notIn]: literal(sub) } };
+    if (expr.op !== 'eq') throw new CrudBadRequestError(`Unsupported filter op for junction field: ${expr.op}`);
+    return { [pk]: { [Op.in]: literal(sub) } };
+  }
+
+  if (isStringArrayField(f)) {
+    if (expr.op === 'eq') return { [field]: { [Op.contains]: [expr.value] } };
+    if (expr.op === 'ne') return { [Op.not]: { [field]: { [Op.contains]: [expr.value] } } };
+    if (expr.op === 'like') {
+      const v = String(expr.value || '').replace(/\\*/g, '%');
+      return where(
+        fn('array_to_string', col(field), ' '),
+        { [Op.iLike]: v.includes('%') ? v : `%${v}%` }
+      );
+    }
+    throw new CrudBadRequestError(`Unsupported filter op for string[] field: ${expr.op}`);
+  }
+
+  const vLike = String(expr.value || '').replace(/\\*/g, '%');
+  const pattern = vLike.includes('%') ? vLike : `%${vLike}%`;
+
+  if (expr.op === 'eq') return { [field]: expr.value };
+  if (expr.op === 'ne') return { [field]: { [Op.ne]: expr.value } };
+  if (expr.op === 'gt') return { [field]: { [Op.gt]: expr.value } };
+  if (expr.op === 'gte') return { [field]: { [Op.gte]: expr.value } };
+  if (expr.op === 'lt') return { [field]: { [Op.lt]: expr.value } };
+  if (expr.op === 'lte') return { [field]: { [Op.lte]: expr.value } };
+  if (expr.op === 'like') return { [field]: { [Op.iLike]: pattern } };
+  if (expr.op === 'range') {
+    const parts: any[] = [];
+    if (expr.min !== undefined) parts.push({ [field]: { [Op.gte]: expr.min } });
+    if (expr.max !== undefined) parts.push({ [field]: { [Op.lte]: expr.max } });
+    if (!parts.length) throw new CrudBadRequestError('Invalid range filter');
+    if (parts.length === 1) return parts[0]!;
+    return { [Op.and]: parts };
+  }
+
+  throw new CrudBadRequestError(`Unsupported filter op: ${expr.op}`);
+}
+
+function filtersToWhere(
+  ast: ListQueryAst,
+  orm: OrmInitResult,
+  model: ModelStatic<Model>,
+  spec: DslModelSpec,
+  modelKey: string
+): any {
   const { Op } = getSequelizeLib(orm);
   const parts: any[] = [];
 
-  const fieldExists = (field: string) => (model as any).rawAttributes?.[field] != null;
-
   for (const group of ast.filters || []) {
     const field = String(group.field);
-    if (!fieldExists(field)) continue;
-
     const ors: any[] = [];
     for (const expr of group.or || []) {
-      const e = expr as FilterExpr;
-      const op = String((e as any).op);
-      if (op === 'eq') ors.push({ [field]: (e as any).value });
-      else if (op === 'ne') ors.push({ [field]: { [Op.ne]: (e as any).value } });
-      else if (op === 'gt') ors.push({ [field]: { [Op.gt]: (e as any).value } });
-      else if (op === 'gte') ors.push({ [field]: { [Op.gte]: (e as any).value } });
-      else if (op === 'lt') ors.push({ [field]: { [Op.lt]: (e as any).value } });
-      else if (op === 'lte') ors.push({ [field]: { [Op.lte]: (e as any).value } });
-      else if (op === 'like') {
-        const v = String((e as any).value || '').replace(/\*/g, '%');
-        ors.push({ [field]: { [Op.iLike]: v } });
-      } else if (op === 'range') {
-        const ands: any[] = [];
-        if ((e as any).min !== undefined) ands.push({ [field]: { [Op.gte]: (e as any).min } });
-        if ((e as any).max !== undefined) ands.push({ [field]: { [Op.lte]: (e as any).max } });
-        if (ands.length === 1) ors.push(ands[0]);
-        else if (ands.length > 1) ors.push({ [Op.and]: ands });
-      }
+      const condition = buildFilterExpr({ orm, modelKey, model, spec, field, expr });
+      if (condition) ors.push(condition);
     }
 
     if (ors.length === 1) parts.push(ors[0]);
@@ -345,6 +415,44 @@ function sortToOrder(sort: SortSpec[], pkField: string, spec?: DslModelSpec): an
   // deterministic tiebreaker
   if (!out.length) out.push([pkField, 'DESC']);
   if (!out.some((x) => String(x?.[0]) === pkField)) out.push([pkField, 'DESC']);
+  return out;
+}
+
+function buildIncludeGraph({
+  orm,
+  model,
+  depth,
+  includeBelongsTo,
+  includeDefaultFilters,
+}: {
+  orm: OrmInitResult;
+  model: any;
+  depth: number;
+  includeBelongsTo: boolean;
+  includeDefaultFilters: boolean;
+}): any[] {
+  const { Op } = getSequelizeLib(orm);
+  if (!depth || depth < 1) return [];
+  const out: any[] = [];
+  const assocs = (model as any).associations || {};
+  const keys = Object.keys(assocs).sort((a, b) => a.localeCompare(b));
+  for (const as of keys) {
+    if (as.startsWith('$')) continue;
+    const assoc = assocs[as];
+    const kind = String(assoc?.associationType || '');
+    if (!includeBelongsTo && kind === 'BelongsTo') continue;
+    const childModel = assoc?.target;
+    const include: any = { association: as, required: false };
+    if (includeDefaultFilters) include.where = { [Op.and]: [{ deleted: false }, { archived: false }] };
+    include.include = buildIncludeGraph({
+      orm,
+      model: childModel,
+      depth: depth - 1,
+      includeBelongsTo: true,
+      includeDefaultFilters,
+    });
+    out.push(include);
+  }
   return out;
 }
 
@@ -436,7 +544,7 @@ export class CrudService {
       if (!ast.includeArchived && (model as any).rawAttributes?.archived) whereParts.push({ archived: false });
       const scopeWhere = rlsWhereToSequelize(orm, args.modelKey, (scope as any).where);
       if (scopeWhere) whereParts.push(scopeWhere);
-      const filterWhere = filtersToWhere(ast, orm, model);
+      const filterWhere = filtersToWhere(ast, orm, model, spec, args.modelKey);
       if (filterWhere) whereParts.push(filterWhere);
       const where = whereParts.length <= 1 ? (whereParts[0] ?? {}) : { [Op.and]: whereParts };
 
@@ -445,12 +553,25 @@ export class CrudService {
       const offset = limit > 0 ? (ast.page - 1) * limit : undefined;
       const order = sortToOrder(ast.sort, pk, spec);
 
-      const rows = (await (model as any).findAll({
+      const include =
+        ast.includeDepth > 0
+          ? buildIncludeGraph({
+              orm,
+              model,
+              depth: ast.includeDepth,
+              includeBelongsTo: true,
+              includeDefaultFilters: !ast.includeDeleted && !ast.includeArchived,
+            })
+          : undefined;
+
+      const results = (await (model as any).findAll({
         where,
         ...(limit > 0 ? { limit, offset } : {}),
         order,
-        raw: true,
+        include,
+        raw: ast.includeDepth === 0,
       })) as Array<Record<string, unknown>>;
+      const rows = ast.includeDepth === 0 ? results : (results as any[]).map((r) => ((r as any)?.toJSON ? (r as any).toJSON() : r));
 
       if (ast.includeDepth === 0) {
         await attachJunctionIds({ orm, modelKey: args.modelKey, spec, pk, rows: rows as any });
@@ -521,7 +642,7 @@ export class CrudService {
     const whereParts: any[] = [];
     if (!ast.includeDeleted && (model as any).rawAttributes?.deleted) whereParts.push({ deleted: false });
     if (!ast.includeArchived && (model as any).rawAttributes?.archived) whereParts.push({ archived: false });
-    const filterWhere = filtersToWhere(ast, orm, model);
+    const filterWhere = filtersToWhere(ast, orm, model, spec, args.modelKey);
     if (filterWhere) whereParts.push(filterWhere);
     const where = whereParts.length <= 1 ? (whereParts[0] ?? {}) : { [Op.and]: whereParts };
 
@@ -529,12 +650,25 @@ export class CrudService {
     const limit = ast.limit;
     const offset = limit > 0 ? (ast.page - 1) * limit : undefined;
     const order = sortToOrder(ast.sort, pk, spec);
-    const rows = (await (model as any).findAll({
+    const include =
+      ast.includeDepth > 0
+        ? buildIncludeGraph({
+            orm,
+            model,
+            depth: ast.includeDepth,
+            includeBelongsTo: true,
+            includeDefaultFilters: !ast.includeDeleted && !ast.includeArchived,
+          })
+        : undefined;
+
+    const results = (await (model as any).findAll({
       where,
       ...(limit > 0 ? { limit, offset } : {}),
       order,
-      raw: true,
+      include,
+      raw: ast.includeDepth === 0,
     })) as Array<Record<string, unknown>>;
+    const rows = ast.includeDepth === 0 ? results : (results as any[]).map((r) => ((r as any)?.toJSON ? (r as any).toJSON() : r));
     if (ast.includeDepth === 0) {
       await attachJunctionIds({ orm, modelKey: args.modelKey, spec, pk, rows: rows as any });
       await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: rows as any });
@@ -619,15 +753,20 @@ export class CrudService {
       }
 
       payload = stripVirtualFields(spec, payload);
-      const created = await (model as any).create(payload);
-      let row = (created as any)?.get ? (created as any).get({ plain: true }) : created;
+      let created: any;
+      let row: any;
+      await (orm.sequelize as any).transaction(async (t: any) => {
+        created = await (model as any).create(payload, { transaction: t });
+        row = created?.get ? created.get({ plain: true }) : created;
 
-      await applyJoinUpdates({
-        orm,
-        modelKey: args.modelKey,
-        spec,
-        instance: created,
-        joinPayloads,
+        await applyJoinUpdates({
+          orm,
+          modelKey: args.modelKey,
+          spec,
+          instance: created,
+          joinPayloads,
+          transaction: t,
+        });
       });
 
       if (runPipelines) {
@@ -709,14 +848,19 @@ export class CrudService {
     }
 
     payload = stripVirtualFields(spec, payload);
-    const created = await (model as any).create(payload);
-    let row = (created as any)?.get ? (created as any).get({ plain: true }) : created;
-    await applyJoinUpdates({
-      orm,
-      modelKey: args.modelKey,
-      spec,
-      instance: created,
-      joinPayloads,
+    let created: any;
+    let row: any;
+    await (orm.sequelize as any).transaction(async (t: any) => {
+      created = await (model as any).create(payload, { transaction: t });
+      row = created?.get ? created.get({ plain: true }) : created;
+      await applyJoinUpdates({
+        orm,
+        modelKey: args.modelKey,
+        spec,
+        instance: created,
+        joinPayloads,
+        transaction: t,
+      });
     });
     if (runPipelines) {
       row = this.pipelines.runPhase({
@@ -762,10 +906,25 @@ export class CrudService {
       if (scopeWhere) whereParts.push(scopeWhere);
       const where = whereParts.length === 1 ? whereParts[0]! : { [getSequelizeLib(orm).Op.and]: whereParts };
 
-      const row = (await (model as any).findOne({ where, raw: true })) as Record<string, any> | null;
-      if (!row) throw new CrudNotFoundError('Not found');
-      await attachJunctionIds({ orm, modelKey: args.modelKey, spec, pk, rows: [row] });
-      await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row] });
+      const includeDepth = Number(args.query?.includeDepth) || 0;
+      const include = includeDepth > 0
+        ? buildIncludeGraph({
+            orm,
+            model,
+            depth: includeDepth,
+            includeBelongsTo: true,
+            includeDefaultFilters: !includeDeleted && !includeArchived,
+          })
+        : undefined;
+
+      const rawRow = (await (model as any).findOne({ where, include, raw: includeDepth === 0 })) as Record<string, any> | null;
+      if (!rawRow) throw new CrudNotFoundError('Not found');
+      const row = (rawRow as any)?.toJSON ? (rawRow as any).toJSON() : rawRow;
+
+      if (includeDepth === 0) {
+        await attachJunctionIds({ orm, modelKey: args.modelKey, spec, pk, rows: [row] });
+        await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row] });
+      }
 
       const runPipelines = args.options?.runPipelines !== false;
       const runResponsePipeline = args.options?.runResponsePipeline !== false;
@@ -793,10 +952,25 @@ export class CrudService {
     if (!includeDeleted && (model as any).rawAttributes?.deleted) whereParts.push({ deleted: false });
     if (!includeArchived && (model as any).rawAttributes?.archived) whereParts.push({ archived: false });
     const where = whereParts.length === 1 ? whereParts[0]! : { [getSequelizeLib(orm).Op.and]: whereParts };
-    const row = (await (model as any).findOne({ where, raw: true })) as Record<string, any> | null;
-    if (!row) throw new CrudNotFoundError('Not found');
-    await attachJunctionIds({ orm, modelKey: args.modelKey, spec, pk, rows: [row] });
-    await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row] });
+    const includeDepth = Number(args.query?.includeDepth) || 0;
+    const include = includeDepth > 0
+      ? buildIncludeGraph({
+          orm,
+          model,
+          depth: includeDepth,
+          includeBelongsTo: true,
+          includeDefaultFilters: !includeDeleted && !includeArchived,
+        })
+      : undefined;
+
+    const rawRow = (await (model as any).findOne({ where, include, raw: includeDepth === 0 })) as Record<string, any> | null;
+    if (!rawRow) throw new CrudNotFoundError('Not found');
+    const row = (rawRow as any)?.toJSON ? (rawRow as any).toJSON() : rawRow;
+
+    if (includeDepth === 0) {
+      await attachJunctionIds({ orm, modelKey: args.modelKey, spec, pk, rows: [row] });
+      await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row] });
+    }
     return pruneRowToDsl(spec, row);
   }
 
@@ -876,15 +1050,19 @@ export class CrudService {
       }
 
       payload = stripVirtualFields(spec, payload);
-      await (existing as any).update(payload);
-      let row = (existing as any)?.get ? (existing as any).get({ plain: true }) : existing;
+      let row: any;
+      await (orm.sequelize as any).transaction(async (t: any) => {
+        await (existing as any).update(payload, { transaction: t });
+        row = (existing as any)?.get ? (existing as any).get({ plain: true }) : existing;
 
-      await applyJoinUpdates({
-        orm,
-        modelKey: args.modelKey,
-        spec,
-        instance: existing,
-        joinPayloads,
+        await applyJoinUpdates({
+          orm,
+          modelKey: args.modelKey,
+          spec,
+          instance: existing,
+          joinPayloads,
+          transaction: t,
+        });
       });
 
       if (runPipelines) {
@@ -934,13 +1112,16 @@ export class CrudService {
     const autoName = computeAutoName(dsl, args.modelKey, { ...before, ...payload });
     if (autoName !== null) payload.auto_name = autoName;
     payload = stripVirtualFields(spec, payload);
-    await (existing as any).update(payload);
-    await applyJoinUpdates({
-      orm,
-      modelKey: args.modelKey,
-      spec,
-      instance: existing,
-      joinPayloads,
+    await (orm.sequelize as any).transaction(async (t: any) => {
+      await (existing as any).update(payload, { transaction: t });
+      await applyJoinUpdates({
+        orm,
+        modelKey: args.modelKey,
+        spec,
+        instance: existing,
+        joinPayloads,
+        transaction: t,
+      });
     });
     const row = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
     await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row as any] });
