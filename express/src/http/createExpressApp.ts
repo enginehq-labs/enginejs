@@ -70,7 +70,7 @@ export async function createExpressApp(opts: ExpressAppOptions) {
   );
   app.use(
     `${basePath}${crudPath}`,
-    createCrudRouter({ getDsl: opts.getDsl, getOrm: opts.getOrm, getConfig: opts.getConfig }),
+    createCrudRouter({ getDsl: opts.getDsl, getOrm: opts.getOrm, getConfig: opts.getConfig, services: opts.services }),
   );
 
   return app;

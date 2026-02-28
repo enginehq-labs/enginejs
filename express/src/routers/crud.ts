@@ -14,12 +14,21 @@ import {
   WorkflowEngine,
   isDslModelSpec,
   parseListQuery,
+  isVirtualField,
+  isStringArrayField,
+  isJunctionIntFkField,
+  CrudService,
+  CrudBadRequestError,
+  CrudForbiddenError,
+  CrudNotFoundError,
+  type ServiceRegistry,
 } from '@enginehq/core';
 
 export type CrudRouterDeps = {
   getDsl: () => DslRoot;
   getOrm: () => OrmInitResult;
   getConfig: () => EngineConfig;
+  services: ServiceRegistry;
 };
 
 function getSequelizeLib(orm: OrmInitResult) {
@@ -59,93 +68,7 @@ function getModel(orm: OrmInitResult, modelKey: string): any | null {
   return (orm.models as any)[modelKey] ?? null;
 }
 
-function isVirtualField(f: DslFieldSpec | undefined): boolean {
-  return (f as any)?.save === false;
-}
 
-function stripVirtualFields(spec: DslModelSpec, payload: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...payload };
-  for (const [field, f] of Object.entries(spec.fields || {})) {
-    if (!f || typeof f !== 'object') continue;
-    if (isVirtualField(f as any)) delete out[field];
-  }
-  return out;
-}
-
-function isStringArrayField(f: DslFieldSpec | undefined): boolean {
-  return (f as any)?.multi === true && String((f as any)?.type || '').toLowerCase() === 'string';
-}
-
-function isJunctionIntFkField(f: DslFieldSpec | undefined): boolean {
-  const multi = (f as any)?.multi === true;
-  const type = String((f as any)?.type || '').toLowerCase();
-  const source = (f as any)?.source;
-  const sourceid = (f as any)?.sourceid;
-  return multi && (type === 'int' || type === 'integer' || type === 'bigint') && !!source && !!sourceid;
-}
-
-const RESTRICT_UNKNOWN_FIELDS = String(process.env.restrict_unknown_fields ?? '').trim() !== '0';
-
-function pruneUnknownPayload(spec: DslModelSpec, payload: Record<string, unknown>): Record<string, unknown> {
-  if (!RESTRICT_UNKNOWN_FIELDS) return { ...payload };
-  const allowed = new Set(Object.keys(spec.fields || {}));
-  if (!allowed.size) return { ...payload };
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(payload)) {
-    if (allowed.has(k)) out[k] = v;
-  }
-  return out;
-}
-
-function parseArrayish(raw: unknown): unknown[] {
-  if (Array.isArray(raw)) return raw;
-  if (raw == null) return [];
-  if (typeof raw === 'string') {
-    const s = raw.trim();
-    if (!s) return [];
-    if (s.startsWith('[')) {
-      try {
-        const parsed = JSON.parse(s);
-        if (Array.isArray(parsed)) return parsed;
-      } catch {}
-    }
-    return s.split(',').map((x) => x.trim()).filter(Boolean);
-  }
-  return [raw];
-}
-
-function normalizePayloadMultiFields(spec: DslModelSpec, payload: Record<string, unknown>): {
-  body: Record<string, unknown>;
-  joinPayloads: Record<string, Array<number>>;
-} {
-  const body: Record<string, unknown> = { ...payload };
-  const joinPayloads: Record<string, Array<number>> = {};
-
-  for (const [field, f] of Object.entries(spec.fields || {})) {
-    if (!f || typeof f !== 'object') continue;
-    const rawVal = body[field];
-    if (rawVal === undefined) continue;
-
-    if (isStringArrayField(f as any)) {
-      const arr = parseArrayish(rawVal).map((v) => String(v));
-      body[field] = arr;
-      continue;
-    }
-
-    if (isJunctionIntFkField(f as any)) {
-      const arr = parseArrayish(rawVal)
-        .map((v) => {
-          const n = typeof v === 'number' ? v : Number.parseInt(String(v), 10);
-          return Number.isFinite(n) ? n : null;
-        })
-        .filter((n) => n != null) as number[];
-      joinPayloads[field] = arr;
-      delete body[field];
-    }
-  }
-
-  return { body, joinPayloads };
-}
 
 function coerceEmptyToNull(spec: DslModelSpec, payload: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...payload };
@@ -788,111 +711,33 @@ function getServicesForPipeline(req: Request) {
   };
 }
 
-export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) {
+export function createCrudRouter({ getConfig, services }: CrudRouterDeps) {
   const router = express.Router();
   const pipelines = new PipelineEngine({ getModelSpec: getModelSpecFromDsl });
 
   router.get('/:model', async (req, res) => {
     try {
-      const dsl = getDsl();
-      const orm = getOrm();
-      const config = getConfig();
       const actor = getActor(req);
-      const { Op } = getSequelizeLib(orm);
-
       const modelKey = String(req.params.model || '');
-      const spec = asModelSpec(dsl, modelKey);
-      const model = spec ? getModel(orm, modelKey) : null;
-      if (!spec || !model) {
-        return res.fail({ code: 404, message: `Unknown model: ${modelKey}`, errors: { root: 'Not found' } });
-      }
-      const pk = getPrimaryKeyField(model);
+      const crud = new CrudService({ services });
 
-      const acl = new AclEngine();
-      const aclRes = acl.can({ actor, modelKey, modelSpec: spec, action: 'read' });
-      if (!aclRes.allow) return res.fail({ code: 403, message: aclRes.reason, errors: { root: 'Forbidden' } });
+      const result = await crud.list({
+        modelKey,
+        actor,
+        query: req.query as any,
+        options: { services: getServicesForPipeline(req) },
+      });
 
-      const rls = new RlsEngine(config.rls);
-      const scope = rls.scope({ actor, modelKey, action: 'list' });
-      if (!scope.allow) return res.fail({ code: 403, message: (scope as any).reason, errors: { root: 'Forbidden' } });
-
-      const ast = parseListQuery(req.query as any);
-      const whereParts = [
-        !ast.includeDeleted ? { deleted: false } : null,
-        !ast.includeArchived ? { archived: false } : null,
-        rlsWhereToSequelize(orm, modelKey, (scope as any).where),
-        buildFiltersWhere({ orm, modelKey, model, spec, ast }),
-        await buildFindWhere({ orm, actor, acl, rls, modelKey, model, spec, ast }),
-      ].filter((x) => x && (typeof x !== 'object' || Object.keys(x).length));
-      const where = whereParts.length <= 1 ? (whereParts[0] ?? {}) : { [Op.and]: whereParts };
-
-      const limit = ast.limit;
-      const offset = limit > 0 ? (ast.page - 1) * limit : undefined;
-      const order = buildOrder(ast, pk, spec);
-      const include =
-        ast.includeDepth > 0
-          ? buildIncludeGraph({
-              orm,
-              model,
-              depth: ast.includeDepth,
-              includeBelongsTo: true,
-              includeDefaultFilters: true,
-            })
-          : undefined;
-
-      const rows = (await model.findAll({
-        where,
-        ...(limit > 0 ? { limit, offset } : {}),
-        order,
-        include,
-        raw: ast.includeDepth === 0,
-      })) as Array<Record<string, any>>;
-
-      const outRows =
-        ast.includeDepth === 0
-          ? rows
-          : (rows as any[]).map((r) => ((r as any)?.toJSON ? (r as any).toJSON() : r));
-
-      if (ast.includeDepth === 0) {
-        await attachJunctionIds({ orm, modelKey, spec, pk, rows: outRows as any });
-        await addFkAutoNames({
-          orm,
-          dsl,
-          modelKey,
-          rows: outRows as any,
-          includeDeleted: ast.includeDeleted,
-          includeArchived: ast.includeArchived,
-        });
-        for (const r of outRows as any[]) Object.assign(r, pruneRowToDsl(spec, r));
-      }
-
-      const totalCount = (await model.count({ where })) as number;
-      const pagination = buildPagination(limit, totalCount, ast.page);
-
-      const registry = getPipelineRegistry(req);
-      const services = getServicesForPipeline(req);
-      const pipedRows: any[] = [];
-      for (const r of outRows) {
-        const piped = pipelines.runPhase({
-          dsl,
-          registrySpec: registry?.get?.(modelKey),
-          action: 'list',
-          phase: 'response',
-          modelKey,
-          actor,
-          input: r,
-          services,
-        }).output;
-        pipedRows.push(pruneRowToDsl(spec, piped));
-      }
-
-      return res.ok(pipedRows.map((r) => acl.pruneRead(r)), { code: 200, pagination });
+      return res.ok(result.rows, { code: 200, pagination: result.pagination });
     } catch (e: any) {
-      if (e instanceof QueryParseError) {
-        return res.fail({ code: 400, message: e.message, errors: { root: 'Bad request' } });
+      if (e instanceof CrudBadRequestError || e instanceof QueryParseError || e instanceof PipelineValidationError) {
+        return res.fail({ code: 400, message: e.message, errors: (e as any).errors || { root: 'Bad request' } });
       }
-      if (e instanceof PipelineValidationError) {
-        return res.fail({ code: 400, message: e.message, errors: e.errors });
+      if (e instanceof CrudForbiddenError) {
+        return res.fail({ code: 403, message: e.message, errors: { root: 'Forbidden' } });
+      }
+      if (e instanceof CrudNotFoundError) {
+        return res.fail({ code: 404, message: e.message, errors: { root: 'Not found' } });
       }
       const code = (e && typeof e === 'object' && (e as any).code) || 500;
       const errors = (e && typeof e === 'object' && (e as any).errors) || { root: 'Error' };
@@ -902,95 +747,29 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
 
   router.get('/:model/:id', async (req, res) => {
     try {
-      const dsl = getDsl();
-      const orm = getOrm();
-      const config = getConfig();
       const actor = getActor(req);
-
       const modelKey = String(req.params.model || '');
-      const spec = asModelSpec(dsl, modelKey);
-      const model = spec ? getModel(orm, modelKey) : null;
-      if (!spec || !model) {
-        return res.fail({ code: 404, message: `Unknown model: ${modelKey}`, errors: { root: 'Not found' } });
-      }
+      const crud = new CrudService({ services });
 
-      const acl = new AclEngine();
-      const aclRes = acl.can({ actor, modelKey, modelSpec: spec, action: 'read' });
-      if (!aclRes.allow) {
-        const code = httpDenyCode(config, 'single');
-        return res.fail({ code, message: code === 404 ? 'Not found' : aclRes.reason, errors: { root: 'Forbidden' } });
-      }
-
-      const rls = new RlsEngine(config.rls);
-      const scope = rls.scope({ actor, modelKey, action: 'read' });
-      if (!scope.allow) {
-        const code = httpDenyCode(config, 'single');
-        return res.fail({ code, message: code === 404 ? 'Not found' : (scope as any).reason, errors: { root: 'Forbidden' } });
-      }
-
-      const includeDeleted = isTruthy((req.query as any).includeDeleted);
-      const includeArchived = isTruthy((req.query as any).includeArchived);
-      const includeDepth = Number.parseInt(String((req.query as any).includeDepth ?? '0'), 10) || 0;
-      const { Op } = getSequelizeLib(orm);
-
-      const pk = getPrimaryKeyField(model);
-      const whereParts: any[] = [{ [pk]: req.params.id }];
-      if (!includeDeleted) whereParts.push({ deleted: false });
-      if (!includeArchived) whereParts.push({ archived: false });
-      const scopeWhere = rlsWhereToSequelize(orm, modelKey, (scope as any).where);
-      if (scopeWhere) whereParts.push(scopeWhere);
-      const where = whereParts.length === 1 ? whereParts[0]! : { [Op.and]: whereParts };
-
-      const include =
-        includeDepth > 0
-          ? buildIncludeGraph({
-              orm,
-              model,
-              depth: includeDepth,
-              includeBelongsTo: true,
-              includeDefaultFilters: true,
-            })
-          : undefined;
-
-      const row = (await model.findOne({
-        where,
-        include,
-        raw: includeDepth === 0,
-      })) as Record<string, any> | null;
-
-      if (!row) return res.fail({ code: 404, message: 'Not found', errors: { root: 'Not found' } });
-
-      const outRow = (row as any)?.toJSON ? (row as any).toJSON() : row;
-      if (includeDepth === 0) {
-        await attachJunctionIds({ orm, modelKey, spec, pk, rows: [outRow] });
-        await addFkAutoNames({
-          orm,
-          dsl,
-          modelKey,
-          rows: [outRow],
-          includeDeleted,
-          includeArchived,
-        });
-        Object.assign(outRow, pruneRowToDsl(spec, outRow));
-      }
-
-      const registry = getPipelineRegistry(req);
-      const services = getServicesForPipeline(req);
-      const piped = pipelines.runPhase({
-        dsl,
-        registrySpec: registry?.get?.(modelKey),
-        action: 'read',
-        phase: 'response',
+      const result = await crud.read({
         modelKey,
+        id: req.params.id,
         actor,
-        input: outRow,
-        services,
-      }).output;
+        query: req.query as any,
+        options: { services: getServicesForPipeline(req) },
+      });
 
-      return res.ok(acl.pruneRead(pruneRowToDsl(spec, piped)), { code: 200, pagination: null });
+      return res.ok(result, { code: 200, pagination: null });
     } catch (e: any) {
-      if (e instanceof PipelineValidationError) {
-        return res.fail({ code: 400, message: e.message, errors: e.errors });
+      if (e instanceof CrudBadRequestError || e instanceof QueryParseError || e instanceof PipelineValidationError) {
+        return res.fail({ code: 400, message: e.message, errors: (e as any).errors || { root: 'Bad request' } });
+      }
+      if (e instanceof CrudForbiddenError) {
+        const hCode = httpDenyCode(getConfig(), 'single');
+        return res.fail({ code: hCode, message: hCode === 404 ? 'Not found' : e.message, errors: { root: 'Forbidden' } });
+      }
+      if (e instanceof CrudNotFoundError) {
+        return res.fail({ code: 404, message: e.message, errors: { root: 'Not found' } });
       }
       const code = (e && typeof e === 'object' && (e as any).code) || 500;
       const errors = (e && typeof e === 'object' && (e as any).errors) || { root: 'Error' };
@@ -1000,143 +779,32 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
 
   router.post('/:model', async (req, res) => {
     try {
-      const dsl = getDsl();
-      const orm = getOrm();
-      const config = getConfig();
       const actor = getActor(req);
-
       const modelKey = String(req.params.model || '');
-      const spec = asModelSpec(dsl, modelKey);
-      const model = spec ? getModel(orm, modelKey) : null;
-      if (!spec || !model) {
-        return res.fail({ code: 404, message: `Unknown model: ${modelKey}`, errors: { root: 'Not found' } });
-      }
-      const pk = getPrimaryKeyField(model);
+      const crud = new CrudService({ services });
 
-      const acl = new AclEngine();
-      const aclRes = acl.can({ actor, modelKey, modelSpec: spec, action: 'create' });
-      if (!aclRes.allow) return res.fail({ code: 403, message: aclRes.reason, errors: { root: 'Forbidden' } });
-
-      const rls = new RlsEngine(config.rls);
-      const guard = rls.writeGuard({ actor, modelKey, action: 'create' });
-      if (!guard.allow) return res.fail({ code: 403, message: (guard as any).reason, errors: { root: 'Forbidden' } });
-
-      const registry = getPipelineRegistry(req);
-      const services = getServicesForPipeline(req);
-
-      let payload = pruneUnknownPayload(spec, { ...(req.body as any) });
-      const { body: normalizedBody, joinPayloads } = normalizePayloadMultiFields(spec, payload);
-      payload = applyWriteGuard({ guard, payload: normalizedBody });
-      payload = coerceEmptyToNull(spec, payload);
-      const autoName = computeAutoName(dsl, modelKey, payload);
-      if (autoName !== null) payload.auto_name = autoName;
-      payload = pipelines.runPhase({
-        dsl,
-        registrySpec: registry?.get?.(modelKey),
-        action: 'create',
-        phase: 'beforeValidate',
+      const originChain = getOriginChain(req);
+      const parentEventId = getParentEventId(req);
+      const result = await crud.create({
         modelKey,
         actor,
-        input: payload,
-        services,
-      }).output;
-      pipelines.runPhase({
-        dsl,
-        registrySpec: registry?.get?.(modelKey),
-        action: 'create',
-        phase: 'validate',
-        modelKey,
-        actor,
-        input: payload,
-        services,
-      });
-      payload = pipelines.runPhase({
-        dsl,
-        registrySpec: registry?.get?.(modelKey),
-        action: 'create',
-        phase: 'beforePersist',
-        modelKey,
-        actor,
-        input: payload,
-        services,
-      }).output;
-
-      payload = stripVirtualFields(spec, payload);
-
-      const created = await model.create(payload);
-      let row = (created as any)?.get ? (created as any).get({ plain: true }) : created;
-
-      await applyJoinUpdates({
-        orm,
-        modelKey,
-        spec,
-        instance: created,
-        joinPayloads,
+        values: req.body,
+        origin: getOrigin(req),
+        ...(originChain ? { originChain } : {}),
+        ...(parentEventId != null ? { parentEventId } : {}),
+        options: { services: getServicesForPipeline(req) },
       });
 
-      row = pipelines.runPhase({
-        dsl,
-        registrySpec: registry?.get?.(modelKey),
-        action: 'create',
-        phase: 'afterPersist',
-        modelKey,
-        actor,
-        input: row,
-        services,
-      }).output;
-
-      syncWorkflowRegistryFromRow({ req, config, modelKey, before: null, after: row });
-
-      if (workflowsEnabled(config)) {
-        const wf = getWorkflowEngine(orm);
-        if (!wf) {
-          return res.fail({
-            code: 500,
-            message: 'Workflow outbox not configured',
-            errors: { root: 'Misconfigured' },
-          });
-        }
-        const parentEventId = getParentEventId(req);
-        const originChain = getOriginChain(req);
-        await wf.emitModelEvent({
-          model: modelKey,
-          action: 'create',
-          before: null,
-          after: row,
-          changedFields: computeChangedFields(null, row),
-          actor,
-          origin: getOrigin(req),
-          ...(originChain ? { originChain } : {}),
-          ...(parentEventId != null ? { parentEventId } : {}),
-        });
-      }
-
-      row = pipelines.runPhase({
-        dsl,
-        registrySpec: registry?.get?.(modelKey),
-        action: 'create',
-        phase: 'response',
-        modelKey,
-        actor,
-        input: row,
-        services,
-      }).output;
-
-      await addFkAutoNames({
-        orm,
-        dsl,
-        modelKey,
-        rows: [row as any],
-        includeDeleted: false,
-        includeArchived: false,
-      });
-      await attachJunctionIds({ orm, modelKey, spec, pk, rows: [row as any] });
-      const pruned = pruneRowToDsl(spec, row as any);
-
-      return res.ok(acl.pruneRead(pruned), { code: 201, pagination: null });
+      return res.ok(result, { code: 201, pagination: null });
     } catch (e: any) {
-      if (e instanceof PipelineValidationError) {
-        return res.fail({ code: 400, message: e.message, errors: e.errors });
+      if (e instanceof CrudBadRequestError || e instanceof QueryParseError || e instanceof PipelineValidationError) {
+        return res.fail({ code: 400, message: e.message, errors: (e as any).errors || { root: 'Bad request' } });
+      }
+      if (e instanceof CrudForbiddenError) {
+        return res.fail({ code: 403, message: e.message, errors: { root: 'Forbidden' } });
+      }
+      if (e instanceof CrudNotFoundError) {
+        return res.fail({ code: 404, message: e.message, errors: { root: 'Not found' } });
       }
       const code = (e && typeof e === 'object' && (e as any).code) || 500;
       const errors = (e && typeof e === 'object' && (e as any).errors) || { root: 'Error' };
@@ -1146,164 +814,34 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
 
   router.patch('/:model/:id', async (req, res) => {
     try {
-      const dsl = getDsl();
-      const orm = getOrm();
-      const config = getConfig();
       const actor = getActor(req);
-
       const modelKey = String(req.params.model || '');
-      const spec = asModelSpec(dsl, modelKey);
-      const model = spec ? getModel(orm, modelKey) : null;
-      if (!spec || !model) {
-        return res.fail({ code: 404, message: `Unknown model: ${modelKey}`, errors: { root: 'Not found' } });
-      }
+      const crud = new CrudService({ services });
 
-      const acl = new AclEngine();
-      const aclRes = acl.can({ actor, modelKey, modelSpec: spec, action: 'update' });
-      if (!aclRes.allow) {
-        const code = httpDenyCode(config, 'single');
-        return res.fail({ code, message: code === 404 ? 'Not found' : aclRes.reason, errors: { root: 'Forbidden' } });
-      }
-
-      const rls = new RlsEngine(config.rls);
-      const scope = rls.scope({ actor, modelKey, action: 'update' });
-      if (!scope.allow) {
-        const code = httpDenyCode(config, 'single');
-        return res.fail({ code, message: code === 404 ? 'Not found' : (scope as any).reason, errors: { root: 'Forbidden' } });
-      }
-
-      const guard = rls.writeGuard({ actor, modelKey, action: 'update' });
-      if (!guard.allow) {
-        const code = httpDenyCode(config, 'single');
-        return res.fail({ code, message: code === 404 ? 'Not found' : (guard as any).reason, errors: { root: 'Forbidden' } });
-      }
-
-      const pk = getPrimaryKeyField(model);
-      const { Op } = getSequelizeLib(orm);
-      const scopeWhere = rlsWhereToSequelize(orm, modelKey, (scope as any).where);
-      const whereParts = [{ [pk]: req.params.id }, { deleted: false }, { archived: false }, scopeWhere].filter(Boolean);
-      const where = whereParts.length === 1 ? whereParts[0]! : { [Op.and]: whereParts };
-
-      const existing = await model.findOne({ where });
-      if (!existing) return res.fail({ code: 404, message: 'Not found', errors: { root: 'Not found' } });
-      const before = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
-
-      const registry = getPipelineRegistry(req);
-      const services = getServicesForPipeline(req);
-
-      let payload = pruneUnknownPayload(spec, { ...(req.body as any) });
-      const { body: normalizedBody, joinPayloads } = normalizePayloadMultiFields(spec, payload);
-      payload = applyWriteGuard({ guard, payload: normalizedBody });
-      payload = coerceEmptyToNull(spec, payload);
-      const autoName = computeAutoName(dsl, modelKey, { ...before, ...payload });
-      if (autoName !== null) payload.auto_name = autoName;
-      payload = pipelines.runPhase({
-        dsl,
-        registrySpec: registry?.get?.(modelKey),
-        action: 'update',
-        phase: 'beforeValidate',
+      const originChain = getOriginChain(req);
+      const parentEventId = getParentEventId(req);
+      const result = await crud.update({
         modelKey,
+        id: req.params.id,
         actor,
-        input: payload,
-        services,
-      }).output;
-      pipelines.runPhase({
-        dsl,
-        registrySpec: registry?.get?.(modelKey),
-        action: 'update',
-        phase: 'validate',
-        modelKey,
-        actor,
-        input: payload,
-        services,
-      });
-      payload = pipelines.runPhase({
-        dsl,
-        registrySpec: registry?.get?.(modelKey),
-        action: 'update',
-        phase: 'beforePersist',
-        modelKey,
-        actor,
-        input: payload,
-        services,
-      }).output;
-
-      payload = stripVirtualFields(spec, payload);
-
-      await (existing as any).update(payload);
-      let row = (existing as any)?.get ? (existing as any).get({ plain: true }) : existing;
-
-      await applyJoinUpdates({
-        orm,
-        modelKey,
-        spec,
-        instance: existing,
-        joinPayloads,
+        values: req.body,
+        origin: getOrigin(req),
+        ...(originChain ? { originChain } : {}),
+        ...(parentEventId != null ? { parentEventId } : {}),
+        options: { services: getServicesForPipeline(req) },
       });
 
-      row = pipelines.runPhase({
-        dsl,
-        registrySpec: registry?.get?.(modelKey),
-        action: 'update',
-        phase: 'afterPersist',
-        modelKey,
-        actor,
-        input: row,
-        services,
-      }).output;
-
-      syncWorkflowRegistryFromRow({ req, config, modelKey, before: before as any, after: row });
-
-      if (workflowsEnabled(config)) {
-        const wf = getWorkflowEngine(orm);
-        if (!wf) {
-          return res.fail({
-            code: 500,
-            message: 'Workflow outbox not configured',
-            errors: { root: 'Misconfigured' },
-          });
-        }
-        const parentEventId = getParentEventId(req);
-        const originChain = getOriginChain(req);
-        await wf.emitModelEvent({
-          model: modelKey,
-          action: 'update',
-          before: before as any,
-          after: row,
-          changedFields: computeChangedFields(before as any, row),
-          actor,
-          origin: getOrigin(req),
-          ...(originChain ? { originChain } : {}),
-          ...(parentEventId != null ? { parentEventId } : {}),
-        });
-      }
-
-      row = pipelines.runPhase({
-        dsl,
-        registrySpec: registry?.get?.(modelKey),
-        action: 'update',
-        phase: 'response',
-        modelKey,
-        actor,
-        input: row,
-        services,
-      }).output;
-
-      await addFkAutoNames({
-        orm,
-        dsl,
-        modelKey,
-        rows: [row as any],
-        includeDeleted: false,
-        includeArchived: false,
-      });
-      await attachJunctionIds({ orm, modelKey, spec, pk, rows: [row as any] });
-      const pruned = pruneRowToDsl(spec, row as any);
-
-      return res.ok(acl.pruneRead(pruned), { code: 200, pagination: null });
+      return res.ok(result, { code: 200, pagination: null });
     } catch (e: any) {
-      if (e instanceof PipelineValidationError) {
-        return res.fail({ code: 400, message: e.message, errors: e.errors });
+      if (e instanceof CrudBadRequestError || e instanceof QueryParseError || e instanceof PipelineValidationError) {
+        return res.fail({ code: 400, message: e.message, errors: (e as any).errors || { root: 'Bad request' } });
+      }
+      if (e instanceof CrudForbiddenError) {
+        const hCode = httpDenyCode(getConfig(), 'single');
+        return res.fail({ code: hCode, message: hCode === 404 ? 'Not found' : e.message, errors: { root: 'Forbidden' } });
+      }
+      if (e instanceof CrudNotFoundError) {
+        return res.fail({ code: 404, message: e.message, errors: { root: 'Not found' } });
       }
       const code = (e && typeof e === 'object' && (e as any).code) || 500;
       const errors = (e && typeof e === 'object' && (e as any).errors) || { root: 'Error' };
@@ -1313,73 +851,31 @@ export function createCrudRouter({ getDsl, getOrm, getConfig }: CrudRouterDeps) 
 
   router.delete('/:model/:id', async (req, res) => {
     try {
-      const dsl = getDsl();
-      const orm = getOrm();
-      const config = getConfig();
       const actor = getActor(req);
-
       const modelKey = String(req.params.model || '');
-      const spec = asModelSpec(dsl, modelKey);
-      const model = spec ? getModel(orm, modelKey) : null;
-      if (!spec || !model) {
-        return res.fail({ code: 404, message: `Unknown model: ${modelKey}`, errors: { root: 'Not found' } });
-      }
+      const crud = new CrudService({ services });
 
-      const acl = new AclEngine();
-      const aclRes = acl.can({ actor, modelKey, modelSpec: spec, action: 'delete' });
-      if (!aclRes.allow) {
-        const code = httpDenyCode(config, 'single');
-        return res.fail({ code, message: code === 404 ? 'Not found' : aclRes.reason, errors: { root: 'Forbidden' } });
-      }
-
-      const rls = new RlsEngine(config.rls);
-      const scope = rls.scope({ actor, modelKey, action: 'delete' });
-      if (!scope.allow) {
-        const code = httpDenyCode(config, 'single');
-        return res.fail({ code, message: code === 404 ? 'Not found' : (scope as any).reason, errors: { root: 'Forbidden' } });
-      }
-
-      const pk = getPrimaryKeyField(model);
-      const { Op } = getSequelizeLib(orm);
-      const scopeWhere = rlsWhereToSequelize(orm, modelKey, (scope as any).where);
-      const whereParts = [{ [pk]: req.params.id }, { deleted: false }, { archived: false }, scopeWhere].filter(Boolean);
-      const where = whereParts.length === 1 ? whereParts[0]! : { [Op.and]: whereParts };
-
-      const existing = await model.findOne({ where });
-      if (!existing) return res.fail({ code: 404, message: 'Not found', errors: { root: 'Not found' } });
-      const before = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
-
-      await (existing as any).update({ deleted: true, deleted_at: new Date() });
-      const after = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
-
-      syncWorkflowRegistryFromRow({ req, config, modelKey, before: before as any, after: null });
-
-      if (workflowsEnabled(config)) {
-        const wf = getWorkflowEngine(orm);
-        if (!wf) {
-          return res.fail({
-            code: 500,
-            message: 'Workflow outbox not configured',
-            errors: { root: 'Misconfigured' },
-          });
-        }
-        const parentEventId = getParentEventId(req);
-        const originChain = getOriginChain(req);
-        await wf.emitModelEvent({
-          model: modelKey,
-          action: 'delete',
-          before: before as any,
-          after: after as any,
-          changedFields: ['deleted', 'deleted_at'],
-          actor,
-          origin: getOrigin(req),
-          ...(originChain ? { originChain } : {}),
-          ...(parentEventId != null ? { parentEventId } : {}),
-        });
-      }
+      const originChain = getOriginChain(req);
+      const parentEventId = getParentEventId(req);
+      await crud.delete({
+        modelKey,
+        id: req.params.id,
+        actor,
+        origin: getOrigin(req),
+        ...(originChain ? { originChain } : {}),
+        ...(parentEventId != null ? { parentEventId } : {}),
+        options: { services: getServicesForPipeline(req) },
+      });
 
       return res.ok({ ok: true }, { code: 200, pagination: null });
     } catch (e: any) {
+      if (e instanceof CrudForbiddenError) {
+        const hCode = httpDenyCode(getConfig(), 'single');
+        return res.fail({ code: hCode, message: hCode === 404 ? 'Not found' : e.message, errors: { root: 'Forbidden' } });
+      }
+      if (e instanceof CrudNotFoundError) {
+        return res.fail({ code: 404, message: e.message, errors: { root: 'Not found' } });
+      }
       const code = (e && typeof e === 'object' && (e as any).code) || 500;
       const errors = (e && typeof e === 'object' && (e as any).errors) || { root: 'Error' };
       return res.fail({ code, message: e?.message || 'Error', errors });

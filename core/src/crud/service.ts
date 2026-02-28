@@ -18,7 +18,7 @@ import { PipelineValidationError } from '../pipelines/errors.js';
 
 import { CrudBadRequestError, CrudForbiddenError, CrudNotFoundError } from './errors.js';
 import type { CrudCallOptions, CrudCtx, CrudListQuery, CrudListResult } from './types.js';
-import { stripVirtualFields, pruneUnknownPayload, normalizePayloadMultiFields } from './utils.js';
+import { stripVirtualFields, pruneUnknownPayload, normalizePayloadMultiFields, computeChangedFields } from './utils.js';
 
 function getSequelizeLib(orm: OrmInitResult) {
   const Seq = (orm.sequelize as any).Sequelize ?? (orm.sequelize as any).constructor;
@@ -497,15 +497,20 @@ export class CrudService {
     };
   }
 
-  private async emitWorkflow(args: { model: string; action: 'create' | 'update' | 'delete'; before: any; after: any; actor?: any }) {
+  private async emitWorkflow(args: { modelKey: string; action: 'create' | 'update' | 'delete'; before: any; after: any; actor?: any; origin?: string | undefined; originChain?: string[] | undefined; parentEventId?: string | number | undefined }) {
     if (!this.deps.services.has('workflowEngine')) return;
     const engine = this.deps.services.resolve<WorkflowEngine>('workflowEngine', { scope: 'singleton' });
+    const changedFields = args.action !== 'delete' ? computeChangedFields(args.before, args.after) : [];
     await engine.emitModelEvent({
-      model: args.model,
+      model: args.modelKey,
       action: args.action,
       before: args.before,
       after: args.after,
       actor: args.actor,
+      origin: args.origin || 'http',
+      ...(args.originChain ? { originChain: args.originChain } : {}),
+      ...(args.parentEventId != null ? { parentEventId: args.parentEventId } : {}),
+      changedFields,
     });
   }
 
@@ -799,7 +804,7 @@ export class CrudService {
       await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row as any] });
       row = pruneRowToDsl(spec, row as any);
 
-      await this.emitWorkflow({ model: args.modelKey, action: 'create', before: null, after: row, actor: args.actor });
+      await this.emitWorkflow({ modelKey: args.modelKey, action: 'create', before: null, after: row, actor: args.actor, origin: args.origin, originChain: args.originChain, parentEventId: args.parentEventId });
 
       return acl.pruneRead(row);
     }
@@ -875,7 +880,7 @@ export class CrudService {
       }).output;
     }
     await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row as any] });
-    await this.emitWorkflow({ model: args.modelKey, action: 'create', before: null, after: row, actor: args.actor });
+    await this.emitWorkflow({ modelKey: args.modelKey, action: 'create', before: null, after: row, actor: args.actor, origin: args.origin, originChain: args.originChain, parentEventId: args.parentEventId });
     return pruneRowToDsl(spec, row as any);
   }
 
@@ -1093,7 +1098,7 @@ export class CrudService {
       }
 
       await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row as any] });
-      await this.emitWorkflow({ model: args.modelKey, action: 'update', before, after: row, actor: args.actor });
+      await this.emitWorkflow({ modelKey: args.modelKey, action: 'update', before, after: row, actor: args.actor, origin: args.origin, originChain: args.originChain, parentEventId: args.parentEventId });
       return pruneRowToDsl(spec, new AclEngine().pruneRead(row));
     }
 
@@ -1125,7 +1130,7 @@ export class CrudService {
     });
     const row = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
     await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row as any] });
-    await this.emitWorkflow({ model: args.modelKey, action: 'update', before, after: row, actor: args.actor });
+    await this.emitWorkflow({ modelKey: args.modelKey, action: 'update', before, after: row, actor: args.actor, origin: args.origin, originChain: args.originChain, parentEventId: args.parentEventId });
     return pruneRowToDsl(spec, row as any);
   }
 
@@ -1158,7 +1163,7 @@ export class CrudService {
       if (!existing) throw new CrudNotFoundError('Not found');
       await (existing as any).update({ deleted: true, deleted_at: new Date() });
       const row = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
-      await this.emitWorkflow({ model: args.modelKey, action: 'delete', before: row, after: null, actor: args.actor });
+      await this.emitWorkflow({ modelKey: args.modelKey, action: 'delete', before: row, after: null, actor: args.actor, origin: args.origin, originChain: args.originChain, parentEventId: args.parentEventId });
       return pruneRowToDsl(spec, new AclEngine().pruneRead(row));
     }
 
@@ -1167,7 +1172,7 @@ export class CrudService {
     if (!existing) throw new CrudNotFoundError('Not found');
     await (existing as any).update({ deleted: true, deleted_at: new Date() });
     const row = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
-    await this.emitWorkflow({ model: args.modelKey, action: 'delete', before: row, after: null, actor: args.actor });
+    await this.emitWorkflow({ modelKey: args.modelKey, action: 'delete', before: row, after: null, actor: args.actor, origin: args.origin, originChain: args.originChain, parentEventId: args.parentEventId });
     return pruneRowToDsl(spec, row);
   }
 

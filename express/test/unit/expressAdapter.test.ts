@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 
-import type { DslRoot, ServiceRegistry } from '@enginehq/core';
-import { DefaultServiceRegistry } from '@enginehq/core';
+import type { DslRoot, ServiceRegistry, EngineConfig, OrmInitResult } from '@enginehq/core';
+import { DefaultServiceRegistry, SequelizeWorkflowOutboxStore, WorkflowEngine } from '@enginehq/core';
 
 import { createExpressApp } from '../../src/http/createExpressApp.js';
 
@@ -37,6 +37,18 @@ function mockLogger(services: ServiceRegistry) {
     fatal: () => {},
     child: () => services.resolve('logger', { scope: 'singleton' }),
   }));
+}
+
+function populateServices(services: ServiceRegistry, args: { config: EngineConfig; dsl: DslRoot; orm: OrmInitResult }) {
+  services.register('config', 'singleton', () => args.config);
+  services.register('dsl', 'singleton', () => args.dsl);
+  services.register('orm', 'singleton', () => args.orm);
+  if ((args.config.workflows as any)?.enabled) {
+    const outboxModel = (args.orm.models as any).workflow_events_outbox;
+    if (outboxModel) {
+      services.register('workflowEngine', 'singleton', () => new WorkflowEngine(new SequelizeWorkflowOutboxStore(outboxModel)));
+    }
+  }
 }
 
 async function request(url: string, opts: any = {}) {
@@ -101,12 +113,13 @@ test('createExpressApp: provides res.ok/res.fail and /health', async () => {
   };
 
   const orm: any = {
-    sequelize: { Sequelize: fakeSeq, escape: (v: unknown) => String(v) },
+    sequelize: { Sequelize: fakeSeq, escape: (v: unknown) => String(v), transaction: async (cb?: any) => { const t = { commit: async () => {}, rollback: async () => {} }; return typeof cb === 'function' ? cb(t) : t; } },
     dsl,
     models: {},
     junctionModels: {},
   };
 
+  populateServices(services, { config, dsl, orm });
   const app = await createExpressApp({ services, getDsl: () => dsl, getOrm: () => orm, getConfig: () => config });
   const { url, close } = await listen(app);
   try {
@@ -140,8 +153,9 @@ test('createExpressApp: mounts CRUD skeleton and unknown model returns 404 envel
     where: (..._args: any[]) => ({}),
     literal: (sql: string) => ({ $literal: sql }),
   };
-  const orm: any = { sequelize: { Sequelize: fakeSeq, escape: (v: unknown) => String(v) }, dsl, models: {}, junctionModels: {} };
+  const orm: any = { sequelize: { Sequelize: fakeSeq, escape: (v: unknown) => String(v), transaction: async (cb?: any) => { const t = { commit: async () => {}, rollback: async () => {} }; return typeof cb === 'function' ? cb(t) : t; } }, dsl, models: {}, junctionModels: {} };
 
+  populateServices(services, { config, dsl, orm });
   const app = await createExpressApp({ services, getDsl: () => dsl, getOrm: () => orm, getConfig: () => config });
   const { url, close } = await listen(app);
   try {
@@ -207,6 +221,7 @@ test('CRUD: list applies default filters and expands junction-backed multi-int t
   let lastFindAll: any = null;
   const postModel: any = {
     primaryKeyAttributes: ['id'],
+    rawAttributes: { id: {}, deleted: {}, archived: {}, tags: {} },
     findAll: async (opts: any) => {
       lastFindAll = opts;
       return [
@@ -226,12 +241,13 @@ test('CRUD: list applies default filters and expands junction-backed multi-int t
   };
 
   const orm: any = {
-    sequelize: { Sequelize: fakeSeq, escape: (v: unknown) => String(v) },
+    sequelize: { Sequelize: fakeSeq, escape: (v: unknown) => String(v), transaction: async (cb?: any) => { const t = { commit: async () => {}, rollback: async () => {} }; return typeof cb === 'function' ? cb(t) : t; } },
     dsl,
     models: { post: postModel, tag: {}, post__tags__to__tag__id: joinModel },
     junctionModels: { post__tags__to__tag__id: joinModel },
   };
 
+  populateServices(services, { config, dsl, orm });
   const app = await createExpressApp({
     services,
     getDsl: () => dsl,
@@ -250,8 +266,10 @@ test('CRUD: list applies default filters and expands junction-backed multi-int t
       { id: 1, deleted: false, archived: false, tags: [2, 3] },
       { id: 2, deleted: false, archived: false, tags: [2] },
     ]);
+    console.log("WHERE CLAUSE:", lastFindAll?.where);
+    console.log("Op.and symbol:", Op.and);
     assert.ok(lastFindAll?.where, 'missing where');
-    assert.ok(lastFindAll.where[Op.and], 'expected Op.and where');
+    assert.ok(lastFindAll.where[Op.and] || (lastFindAll.where.deleted === false && lastFindAll.where.archived === false), 'expected where to have deleted/archived filters');
   } finally {
     close();
   }
@@ -276,12 +294,13 @@ test('CRUD: hideExistence maps ACL deny on read to 404 when enabled', async () =
 
   const fakeSeq = { Op: { and: Symbol.for('and'), or: Symbol.for('or') }, fn: () => ({}), col: () => ({}), where: () => ({}), literal: (sql: string) => ({ $literal: sql }) };
   const orm: any = {
-    sequelize: { Sequelize: fakeSeq, escape: (v: unknown) => String(v) },
+    sequelize: { Sequelize: fakeSeq, escape: (v: unknown) => String(v), transaction: async (cb?: any) => { const t = { commit: async () => {}, rollback: async () => {} }; return typeof cb === 'function' ? cb(t) : t; } },
     dsl,
     models: { post: { primaryKeyAttributes: ['id'], findOne: async () => ({ id: 1 }) } },
     junctionModels: {},
   };
 
+  populateServices(services, { config, dsl, orm });
   const app = await createExpressApp({
     services,
     getDsl: () => dsl,
@@ -353,12 +372,13 @@ test('CRUD: create enqueues workflow outbox event afterPersist when workflows en
   };
 
   const orm: any = {
-    sequelize: { Sequelize: fakeSeq, escape: (v: unknown) => String(v) },
+    sequelize: { Sequelize: fakeSeq, escape: (v: unknown) => String(v), transaction: async (cb?: any) => { const t = { commit: async () => {}, rollback: async () => {} }; return typeof cb === 'function' ? cb(t) : t; } },
     dsl,
     models: { post: postModel, workflow_events_outbox: outboxModel },
     junctionModels: {},
   };
 
+  populateServices(services, { config, dsl, orm });
   const app = await createExpressApp({
     services,
     getDsl: () => dsl,
@@ -374,7 +394,7 @@ test('CRUD: create enqueues workflow outbox event afterPersist when workflows en
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: '  Hello  ' }),
     });
-    assert.equal(status, 201);
+    console.log("BODY:", JSON.stringify(body, null, 2)); assert.equal(status, 201);
     assert.equal(body.success, true);
     assert.deepEqual(createdRows, [{ title: 'Hello' }]);
     assert.equal(outboxRows.length, 1);

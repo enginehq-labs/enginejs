@@ -37,4 +37,7 @@ export type CrudListResult = {
 
 export type CrudCtx = {
   actor: Actor;
+  origin?: string | undefined;
+  originChain?: string[] | undefined;
+  parentEventId?: string | number | undefined;
 };
