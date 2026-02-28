@@ -1,6 +1,6 @@
 # Plan: CRUD Logic Consolidation & Feature Parity
 
-## Phase 1: Core Utilities Consolidation
+## Phase 1: Core Utilities Consolidation [checkpoint: 556c1fa]
 
 - [x] Task: Move payload processing utilities to `@enginehq/core`. 83ffc8e
   - [x] Create `core/src/crud/utils.ts` and implement `pruneUnknownPayload`, `stripVirtualFields`, `parseArrayish`, and `normalizePayloadMultiFields`.
@@ -8,7 +8,7 @@
 - [x] Task: Integrate utilities into `CrudService`. 83ffc8e
   - [x] Update `CrudService` to use these utilities for all mutation operations (`create`, `update`).
   - [x] Ensure `core` unit tests pass.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Core Utilities Consolidation' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Core Utilities Consolidation' 556c1fa
 
 ## Phase 2: CrudService Feature Parity
 
