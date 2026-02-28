@@ -18,6 +18,7 @@ import { PipelineValidationError } from '../pipelines/errors.js';
 
 import { CrudBadRequestError, CrudForbiddenError, CrudNotFoundError } from './errors.js';
 import type { CrudCallOptions, CrudCtx, CrudListQuery, CrudListResult } from './types.js';
+import { stripVirtualFields, pruneUnknownPayload, normalizePayloadMultiFields } from './utils.js';
 
 function getSequelizeLib(orm: OrmInitResult) {
   const Seq = (orm.sequelize as any).Sequelize ?? (orm.sequelize as any).constructor;
@@ -32,82 +33,7 @@ function getPrimaryKeyField(model: ModelStatic<Model>): string {
   return String(pk || 'id');
 }
 
-function stripVirtualFields(spec: DslModelSpec, payload: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...payload };
-  for (const [k, f] of Object.entries(spec.fields || {})) {
-    if (f && typeof f === 'object' && (f as any).save === false) delete out[k];
-  }
-  return out;
-}
 
-const RESTRICT_UNKNOWN_FIELDS = String(process.env.restrict_unknown_fields ?? '').trim() !== '0';
-
-function pruneUnknownPayload(spec: DslModelSpec, payload: Record<string, unknown>): Record<string, unknown> {
-  if (!RESTRICT_UNKNOWN_FIELDS) return { ...payload };
-  const allowed = new Set(Object.keys(spec.fields || {}));
-  if (!allowed.size) return { ...payload };
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(payload)) {
-    if (allowed.has(k)) out[k] = v;
-  }
-  return out;
-}
-
-function parseArrayish(raw: unknown): unknown[] {
-  if (Array.isArray(raw)) return raw;
-  if (raw == null) return [];
-  if (typeof raw === 'string') {
-    const s = raw.trim();
-    if (!s) return [];
-    if (s.startsWith('[')) {
-      try {
-        const parsed = JSON.parse(s);
-        if (Array.isArray(parsed)) return parsed;
-      } catch {}
-    }
-    return s.split(',').map((x) => x.trim()).filter(Boolean);
-  }
-  return [raw];
-}
-
-function normalizePayloadMultiFields(spec: DslModelSpec, payload: Record<string, unknown>): {
-  body: Record<string, unknown>;
-  joinPayloads: Record<string, Array<number>>;
-} {
-  const body: Record<string, unknown> = { ...payload };
-  const joinPayloads: Record<string, Array<number>> = {};
-
-  for (const [field, f] of Object.entries(spec.fields || {})) {
-    if (!f || typeof f !== 'object') continue;
-    const rawVal = body[field];
-    if (rawVal === undefined) continue;
-
-    if ((f as any).multi === true && String((f as any).type || '').toLowerCase() === 'string') {
-      const arr = parseArrayish(rawVal).map((v) => String(v));
-      body[field] = arr;
-      continue;
-    }
-
-    const isMultiIntFk =
-      (f as any).multi === true &&
-      ((f as any).type === 'int' || (f as any).type === 'integer' || (f as any).type === 'bigint') &&
-      (f as any).source &&
-      (f as any).sourceid;
-
-    if (isMultiIntFk) {
-      const arr = parseArrayish(rawVal)
-        .map((v) => {
-          const n = typeof v === 'number' ? v : Number.parseInt(String(v), 10);
-          return Number.isFinite(n) ? n : null;
-        })
-        .filter((n) => n != null) as number[];
-      joinPayloads[field] = arr;
-      delete body[field];
-    }
-  }
-
-  return { body, joinPayloads };
-}
 
 function coerceEmptyToNull(spec: DslModelSpec, payload: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...payload };
