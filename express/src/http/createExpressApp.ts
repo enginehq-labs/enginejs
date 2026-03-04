@@ -1,7 +1,7 @@
 import express from 'express';
 import type { Actor, DslRoot, EngineConfig, OrmInitResult, ServiceRegistry } from '@enginehq/core';
-import type { EngineRuntime } from '@enginehq/core'; // Added import for EngineRuntime
-import type { Express } from 'express'; // Added import for Express
+import type { EngineRuntime } from '@enginehq/core';
+import type { Express } from 'express';
 
 import { actorMiddleware, type ActorResolver } from '../middleware/actor.js';
 import { responseEnvelope } from '../middleware/responseEnvelope.js';
@@ -10,6 +10,7 @@ import { createObservabilityMiddleware } from './middleware/observability.js';
 import type { Logger } from '@enginehq/core';
 import { createAdminRouter } from '../routers/admin.js';
 import { createCrudRouter } from '../routers/crud.js';
+import { createBuiltinAuthRouter } from '../routers/auth.js';
 
 export type ExpressAppOptions = {
   basePath?: string;
@@ -51,6 +52,15 @@ export async function createExpressApp(opts: ExpressAppOptions) {
 
   app.get(`${basePath}/health`, (_req, res) => res.ok({ ok: true }, { code: 200, pagination: null }));
   
+  // Mount built-in auth routes when auth.local is configured
+  if (config.auth?.local) {
+    const authPath = `${basePath}/auth`;
+    app.use(
+      authPath,
+      createBuiltinAuthRouter({ local: config.auth.local, config, services: opts.services }),
+    );
+  }
+
   if (opts.registerCustomRoutes) {
     // Custom routes should be registered before generic CRUD/Admin
     // to allow more specific custom routes to take precedence.

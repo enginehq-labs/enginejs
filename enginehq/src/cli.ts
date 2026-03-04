@@ -11,15 +11,19 @@ const PKG_NAME = 'enginehq';
 
 function usage(code = 0): never {
   const msg = `Usage:
-  enginehq init <dir> [--force]
+  enginehq init <dir> [--force] [--auth]
   enginehq sync [--dry-run] [--requireSnapshot] [--allowNoSnapshot]
   enginehq workflows sync [--overwrite]
   enginehq workflows worker
   enginehq start
   enginehq dev
 
+Flags:
+  --force   init: write into a non-empty directory
+  --auth    init: scaffold the built-in auth setup (user model + auth.local config)
+
 Notes:
-  - Apps run via \`node --import tsx .\` with package.json main pointing to enginehq runtime.
+  - Scaffolded apps run via \`npm start\` (\`enginehq start\`) or \`npm run dev\` (\`enginehq dev\`).
 `;
   (code === 0 ? process.stdout : process.stderr).write(msg);
   process.exit(code);
@@ -55,6 +59,8 @@ export type InitAppOptions = {
   dir: string;
   force?: boolean;
   name?: string;
+  /** When true, scaffold built-in auth: user model DSL + auth.local config section */
+  auth?: boolean;
 };
 
 export function initEngineJsApp(opts: InitAppOptions): void {
@@ -87,10 +93,9 @@ export function initEngineJsApp(opts: InitAppOptions): void {
       name,
       private: true,
       type: 'module',
-      main: './node_modules/enginehq/dist/runtime/app.js',
       scripts: {
-        start: 'node --import tsx .',
-        dev: 'node --import tsx .',
+        start: 'enginehq start',
+        dev: 'enginehq dev',
       },
       dependencies: {
         enginehq: '^0.1.2',
@@ -98,6 +103,16 @@ export function initEngineJsApp(opts: InitAppOptions): void {
     },
     force,
   );
+
+  const authEnabled = opts.auth === true;
+  const authSection = authEnabled
+    ? `      auth: {
+        jwt: { accessSecret: process.env.JWT_SECRET || 'dev', accessTtl: '15m' },
+        local: {
+          userModel: 'user',
+        },
+      },`
+    : `      auth: { jwt: { accessSecret: process.env.JWT_SECRET || 'dev', accessTtl: '1h' } },`;
 
   writeFileIfMissing(
     path.join(targetDir, 'enginejs.config.ts'),
@@ -112,7 +127,7 @@ export default {
     dsl: {
       fragments: { modelsDir: 'dsl/models', metaDir: 'dsl/meta' },
     },
-    auth: { jwt: { accessSecret: process.env.JWT_SECRET || 'dev', accessTtl: '1h' } },
+${authSection}
     acl: {},
     rls: { subjects: {}, policies: {} },
     workflows: { enabled: true },
@@ -264,6 +279,32 @@ export const ops = {
     force,
   );
 
+  // Scaffold user model when --auth is requested
+  if (authEnabled) {
+    writeJsonIfMissing(
+      path.join(targetDir, 'dsl', 'models', 'user.json'),
+      {
+        user: {
+          fields: {
+            id: { type: 'int', primary: true, autoIncrement: true },
+            email: { type: 'string', required: true, canfind: true },
+            password: { type: 'string', save: false },
+            password_hash: { type: 'string' },
+            roles: { type: 'array' },
+          },
+          indexes: { unique: [['email']], many: [], lower: [] },
+          access: {
+            read:   ['*'],
+            create: ['*'],
+            update: ['*'],
+            delete: ['admin'],
+          },
+        },
+      },
+      force,
+    );
+  }
+
   writeFileIfMissing(
     path.join(targetDir, 'routes', 'hello.ts'),
     `export default function register({ app }: any) {
@@ -350,7 +391,7 @@ export async function runCli(argv = process.argv): Promise<void> {
   if (cmd === 'init') {
     const dir = positionals[0];
     if (!dir) usage(1);
-    initEngineJsApp({ dir, force: flags.has('--force') });
+    initEngineJsApp({ dir, force: flags.has('--force'), auth: flags.has('--auth') });
     process.stdout.write(`Initialized EngineJS app in ${path.resolve(dir)}\n`);
     return;
   }
