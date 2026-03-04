@@ -1,5 +1,18 @@
 # Plan: Built-in Auth Routes & Auto-wired JWT Actor Resolver
 
+## Phase 0: Fix `enginehq init` Scaffold Scripts
+
+> **Goal**: `enginehq init` currently scaffolds `"start": "node --import tsx ."` which requires the verbose `"main": "./node_modules/enginehq/dist/runtime/app.js"` in `package.json`. Change it to use the CLI directly, which is cleaner and requires no `"main"` pointing into `node_modules`.
+
+> **Note on `"main": "enginehq/entry"` (Expo Router style)**: In Expo, this works because Metro bundler resolves bare specifiers. Standard Node.js `node .` treats `"main"` as a file path and does not support bare package specifiers. The equivalent EngineJS pattern is using the CLI binary (`enginehq start`) in `"scripts"`.
+
+- [ ] Task: Update `initEngineJsApp` in `enginehq/src/cli.ts`.
+  - Sub-task: Change scaffolded `"scripts"` to `{ "start": "enginehq start", "dev": "enginehq dev" }`.
+  - Sub-task: Remove the `"main": "./node_modules/enginehq/dist/runtime/app.js"` entry from the scaffolded `package.json` (it is no longer needed when using `enginehq start`).
+- [ ] Task: Write/update unit test for `initEngineJsApp` to assert the new scripts shape.
+
+---
+
 ## Phase 1: Auto-wired JWT `actorResolver`
 
 > **Goal**: When `auth.jwt.accessSecret` is configured, the runtime automatically verifies `Authorization: Bearer` tokens and populates `req.actor` — no user-written resolver code needed.
