@@ -36,8 +36,8 @@
 
 ## Phase 4: Integration & Documentation
 
-- [ ] Task: Write end-to-end integration tests for new features.
-  - [ ] Verify `includeDepth` and complex filters via HTTP in `express/test/integration/crudConsolidation.test.ts`.
-- [ ] Task: Update framework documentation.
-  - [ ] Document `includeDepth` and filter capabilities in `conductor/framework/dsl.md`.
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Integration & Documentation' (Protocol in workflow.md)
+- [x] Task: Write end-to-end integration tests for new features.
+  - [x] Verify `includeDepth` and complex filters via HTTP in `express/test/integration/crudConsolidation.test.ts`.
+- [x] Task: Update framework documentation.
+  - [x] Document `includeDepth` and filter capabilities in `conductor/framework/dsl.md`.
+- [~] Task: Conductor - User Manual Verification 'Phase 4: Integration & Documentation' (Protocol in workflow.md)

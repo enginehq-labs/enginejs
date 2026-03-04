@@ -92,3 +92,17 @@ export function normalizePayloadMultiFields(
 
   return { body, joinPayloads };
 }
+
+export function computeChangedFields(before: Record<string, unknown> | null, after: Record<string, unknown>): string[] {
+  const keys = new Set<string>();
+  for (const k of Object.keys(after || {})) keys.add(k);
+  if (before) for (const k of Object.keys(before)) keys.add(k);
+  const changed: string[] = [];
+  for (const k of [...keys].sort((a, b) => a.localeCompare(b))) {
+    const a = before ? (before as any)[k] : undefined;
+    const b = (after as any)[k];
+    const same = a === b || (a == null && b == null);
+    if (!same) changed.push(k);
+  }
+  return changed;
+}

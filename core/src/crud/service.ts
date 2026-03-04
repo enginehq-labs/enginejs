@@ -240,6 +240,18 @@ async function addFkAutoNames({
 
 function pruneRowToDsl(spec: DslModelSpec, row: Record<string, any>): Record<string, any> {
   const allowed = new Set(Object.keys(spec.fields || {}));
+  
+  // also allow includes whose alias matches the field's 'as' or 'source'
+  for (const f of Object.values(spec.fields || {})) {
+    if (!f || typeof f !== 'object') continue;
+    if ((f as any).multi) continue;
+    const source = (f as any).source;
+    if (source) {
+      const alias = (f as any).as || String(source);
+      allowed.add(alias);
+    }
+  }
+
   const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(row || {})) {
     if (allowed.has(k) || k.endsWith('_auto_name')) out[k] = v;
@@ -499,6 +511,9 @@ export class CrudService {
 
   private async emitWorkflow(args: { modelKey: string; action: 'create' | 'update' | 'delete'; before: any; after: any; actor?: any; origin?: string | undefined; originChain?: string[] | undefined; parentEventId?: string | number | undefined }) {
     if (!this.deps.services.has('workflowEngine')) return;
+    const config = this.getConfig();
+    if (!config.workflows?.enabled) return;
+
     const engine = this.deps.services.resolve<WorkflowEngine>('workflowEngine', { scope: 'singleton' });
     const changedFields = args.action !== 'delete' ? computeChangedFields(args.before, args.after) : [];
     await engine.emitModelEvent({

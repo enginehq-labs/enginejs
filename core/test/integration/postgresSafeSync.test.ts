@@ -3,85 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 
 import { createEngine, safeSync, MigrationRunner } from '../../src/index.js';
+import { dockerAvailable, ensureDockerImage, getSharedPgPort, ensurePgDatabase, waitFor } from './helpers/dockerPostgres.js';
 
-function dockerAvailable(): boolean {
-  try {
-    execFileSync('docker', ['version'], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
-function isTruthy(v: unknown): boolean {
-  const s = String(v ?? '').trim().toLowerCase();
-  return s === '1' || s === 'true' || s === 'yes';
-}
-
-function ensureDockerImage(image: string): boolean {
-  try {
-    execFileSync('docker', ['image', 'inspect', image], { stdio: 'ignore' });
-    return true;
-  } catch {}
-
-  if (!isTruthy(process.env.ENGINEJS_DOCKER_PULL)) return false;
-
-  const timeoutMs = Number(process.env.ENGINEJS_DOCKER_PULL_TIMEOUT_MS || 30_000);
-  try {
-    execFileSync('docker', ['pull', image], { stdio: 'pipe', timeout: timeoutMs });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function startPostgresContainer(image: string, password: string, db: string): { id: string; port: number } {
-  const timeoutMs = Number(process.env.ENGINEJS_DOCKER_RUN_TIMEOUT_MS || 10_000);
-  const id = execFileSync(
-    'docker',
-    [
-      'run',
-      '-d',
-      '--rm',
-      '-e',
-      `POSTGRES_PASSWORD=${password}`,
-      '-e',
-      `POSTGRES_DB=${db}`,
-      '-p',
-      '127.0.0.1::5432',
-      image,
-    ],
-    { encoding: 'utf8', timeout: timeoutMs },
-  ).trim();
-
-  const portLine = execFileSync('docker', ['port', id, '5432/tcp'], { encoding: 'utf8' }).trim();
-  const portStr = portLine.split(':').pop();
-  const port = Number(portStr);
-  if (!Number.isFinite(port) || port <= 0) throw new Error(`Failed to parse docker port: ${portLine}`);
-
-  return { id, port };
-}
-
-async function sleep(ms: number) {
-  await new Promise((r) => setTimeout(r, ms));
-}
-
-async function waitFor<T>(fn: () => Promise<T>, timeoutMs: number) {
-  const started = Date.now();
-  let lastErr: unknown = null;
-  while (Date.now() - started < timeoutMs) {
-    try {
-      return await fn();
-    } catch (e) {
-      lastErr = e;
-      await sleep(250);
-    }
-  }
-  throw lastErr ?? new Error('Timed out');
-}
 
 test('docker postgres: safeSync creates tables + widens (varchar->text) and blocks narrowing via snapshot; MigrationRunner applies migration', async (t) => {
   if (!dockerAvailable()) return t.skip('Docker not available');
@@ -95,12 +21,7 @@ test('docker postgres: safeSync creates tables + widens (varchar->text) and bloc
 
   const password = 'enginejs';
   const dbName = 'enginejs_sync_test';
-  const { id, port } = startPostgresContainer(image, password, dbName);
-  t.after(() => {
-    try {
-      execFileSync('docker', ['rm', '-f', id], { stdio: 'ignore' });
-    } catch {}
-  });
+  const port = getSharedPgPort(image, password);
 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'enginejs-pg-sync-'));
   const dslDir = path.join(root, 'dsl');
@@ -155,9 +76,12 @@ test('docker postgres: safeSync creates tables + widens (varchar->text) and bloc
     rls: { subjects: {}, policies: {} },
   });
 
+  ensurePgDatabase(dbName);
   await engine.init();
+
   const sequelize = engine.services.resolve<any>('db', { scope: 'singleton' });
   await waitFor(() => sequelize.authenticate(), 30_000);
+
 
   const report1 = await safeSync({ sequelize, orm: engine.orm!, dsl: engine.dsl! as any, snapshotModelKey: 'dsl' });
   assert.equal(report1.snapshotWritten, true);
