@@ -3,6 +3,25 @@
 ## Introduction
 EngineJS provides a unified request handling architecture that bridges HTTP interfaces (via Express) with core business logic (via the `CrudService`). This integration ensures that all operations—whether triggered via API or internally—pass through the same security, validation, and pipeline logic.
 
+## App Entry Point
+EngineJS apps are zero-boilerplate. After initializing with `enginehq init`, the app's `package.json` scripts use the CLI to start the server — no `server.ts` file is required.
+
+```json
+{
+  "scripts": {
+    "start": "enginehq start",
+    "dev":   "enginehq dev"
+  }
+}
+```
+
+The `enginehq start` command boots `runtime/app.ts` which:
+1. Loads `enginejs.config.ts` from the current directory.
+2. Autoloads `pipeline/`, `workflow/`, and `routes/` directories.
+3. Creates and starts the Express server on `http.port` (default: `3000`).
+
+> **Note**: `"main"` in `package.json` is not required when using `enginehq start`. The CLI resolves the runtime path internally. Bare specifiers like `"enginehq/entry"` in `"main"` are not supported in Node.js (only in bundler environments like Metro/Expo).
+
 ## Express Adapter
 The Express adapter (`@enginehq/express`) provides the HTTP interface for the framework.
 
@@ -10,7 +29,7 @@ The Express adapter (`@enginehq/express`) provides the HTTP interface for the fr
 Every request to an EngineJS app passes through a standardized middleware stack:
 1. **`responseEnvelope`**: Augments the `res` object with `.ok()` and `.fail()` methods, ensuring a consistent JSON response structure across the entire API.
 2. **`servicesMiddleware`**: Injects the framework's `ServiceRegistry` into the `req` object.
-3. **`actorMiddleware`**: Resolves the `Actor` (identity) for the current request using a configurable `ActorResolver`.
+3. **`actorMiddleware`**: Resolves the `Actor` (identity) for the current request. When `auth.jwt.accessSecret` is configured, this is **automatically wired** to verify `Authorization: Bearer` tokens — no custom `resolveActor` function needed. See [Auth & Sessions](auth.md) for details.
 
 ### Generic CRUD Router
 The framework automatically mounts a generic CRUD router. By default, it is mounted at `/api`, but this is configurable via `http.crudPath` in `enginejs.config.ts`.

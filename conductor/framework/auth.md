@@ -26,6 +26,73 @@ Durations can be specified using human-readable strings:
 - `h`: Hours
 - `d`: Days
 
+### Auto-wired `actorResolver`
+When `auth.jwt.accessSecret` is present in `enginejs.config.ts`, the runtime (`runtime/app.ts`) **automatically** wires a JWT `actorResolver` into the Express adapter. Apps do not need to write a custom resolver.
+
+The built-in resolver:
+1. Reads the `Authorization: Bearer <token>` header.
+2. Calls `verifyActorAccessTokenHS256` to decode and validate the token.
+3. Returns the decoded `Actor` on success, or the anonymous actor `{ isAuthenticated: false, ... }` on missing/invalid tokens.
+
+A custom `resolveActor` can still be supplied via `enginejs.config.ts` to override this behaviour.
+
+## Built-in Auth Routes (`auth.local`)
+
+When `auth.local` is configured, the runtime automatically mounts the following endpoints at `${basePath}/auth` — no custom route files needed.
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/auth/register` | Creates a user, hashes password, returns access + refresh tokens |
+| `POST` | `/auth/login` | Verifies credentials, returns token pair |
+| `POST` | `/auth/refresh` | Rotates refresh token, returns new token pair |
+| `POST` | `/auth/logout` | Revokes the current session |
+| `GET`  | `/auth/me` | Returns the resolved `req.actor` |
+
+### `auth.local` Config Reference
+
+```typescript
+type AuthLocalConfig = {
+  userModel:         string;   // DSL model key (e.g. 'user')
+  emailField?:       string;   // login identifier field (default: 'email')
+  passwordField?:    string;   // virtual input field name (default: 'password')
+  passwordHashField?: string;  // persisted hash field (default: 'password_hash')
+  rolesField?:       string;   // field providing roles array (default: 'roles')
+  subjectKey?:       string;   // RLS subject key (default: 'user')
+
+  // Optional extension hooks
+  onRegister?:   (user: Record<string, unknown>, engine: EngineRuntime) => Promise<void>;
+  buildClaims?:  (user: Record<string, unknown>) => Record<string, unknown>;
+};
+```
+
+### Password Handling
+The `password` field must be declared as `"save": false` in the DSL (virtual field — never written to the DB). The built-in `hashPassword` pipeline op intercepts it during `beforePersist` and writes the PBKDF2/bcrypt hash to `passwordHashField` automatically.
+
+### Minimal Config Example
+
+```typescript
+// enginejs.config.ts
+export default {
+  engine: {
+    auth: {
+      jwt: { accessSecret: process.env.JWT_SECRET!, accessTtl: '15m' },
+      local: {
+        userModel: 'user',
+      },
+    },
+    rls: {
+      subjects: { user: { idClaim: 'sub' } },
+      policies: {
+        post: {
+          read:   { rule: { eq: { field: 'user_id', subject: 'user' } } },
+          create: { enforce: { user_id: 'user' } },
+        },
+      },
+    },
+  },
+} as const;
+```
+
 ## Session Management (Optional)
 For applications requiring stateful control over logins, EngineJS provides a `SessionService`.
 
