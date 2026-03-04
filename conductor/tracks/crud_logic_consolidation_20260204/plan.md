@@ -40,4 +40,4 @@
   - [x] Verify `includeDepth` and complex filters via HTTP in `express/test/integration/crudConsolidation.test.ts`.
 - [x] Task: Update framework documentation.
   - [x] Document `includeDepth` and filter capabilities in `conductor/framework/dsl.md`.
-- [~] Task: Conductor - User Manual Verification 'Phase 4: Integration & Documentation' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Integration & Documentation' 07da7d5
