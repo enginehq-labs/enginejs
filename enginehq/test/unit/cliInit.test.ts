@@ -38,7 +38,9 @@ test('enginehq initEngineJsApp scaffolds required folders/files', () => {
   assert.equal(fs.existsSync(path.join(appDir, 'dsl', 'schema.json')), false, 'app should not vendor DSL schema file');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8'));
-  assert.equal(pkg.main, './node_modules/enginehq/dist/runtime/app.js');
+  assert.strictEqual(pkg.scripts?.start, 'enginehq start', 'scripts.start should be enginehq start');
+  assert.strictEqual(pkg.scripts?.dev, 'enginehq dev', 'scripts.dev should be enginehq dev');
+  assert.ok(!('main' in pkg), '"main" field should not be present (use enginehq start instead)');
   assert.equal(pkg.dependencies.enginehq != null, true);
 });
 

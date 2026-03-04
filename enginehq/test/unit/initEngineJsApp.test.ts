@@ -1,0 +1,58 @@
+import { describe, it, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { initEngineJsApp } from '../../src/cli.js';
+
+let tmpDir: string;
+
+describe('initEngineJsApp', () => {
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'enginejs-init-test-'));
+  });
+
+  after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('scaffolds scripts with enginehq start/dev (no "main")', () => {
+    const dir = path.join(tmpDir, 'basic-app');
+    initEngineJsApp({ dir, name: 'my-app' });
+
+    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'));
+    assert.strictEqual(pkg.scripts?.start, 'enginehq start');
+    assert.strictEqual(pkg.scripts?.dev, 'enginehq dev');
+    assert.ok(!('main' in pkg), '"main" field should not be present');
+  });
+
+  it('scaffolds auth.local config and user.json when --auth is specified', () => {
+    const dir = path.join(tmpDir, 'auth-app');
+    initEngineJsApp({ dir, name: 'auth-app', auth: true });
+
+    // user model DSL should be created
+    const userModelPath = path.join(dir, 'dsl', 'models', 'user.json');
+    assert.ok(fs.existsSync(userModelPath), 'user.json should exist');
+
+    const model = JSON.parse(fs.readFileSync(userModelPath, 'utf-8'));
+    assert.ok(model.user, 'user model should exist');
+    assert.ok(model.user.fields?.email, 'user model should have email field');
+    assert.ok(model.user.fields?.password_hash, 'user model should have password_hash field');
+
+    // enginejs.config.ts should contain auth.local section
+    const config = fs.readFileSync(path.join(dir, 'enginejs.config.ts'), 'utf-8');
+    assert.ok(config.includes('local:'), 'config should include auth.local section');
+    assert.ok(config.includes('userModel:'), 'config should include userModel in auth.local');
+  });
+
+  it('does NOT scaffold user.json without --auth', () => {
+    const dir = path.join(tmpDir, 'no-auth-app');
+    initEngineJsApp({ dir, name: 'no-auth-app' });
+
+    const userModelPath = path.join(dir, 'dsl', 'models', 'user.json');
+    assert.ok(!fs.existsSync(userModelPath), 'user.json should NOT exist without --auth');
+
+    const config = fs.readFileSync(path.join(dir, 'enginejs.config.ts'), 'utf-8');
+    assert.ok(!config.includes('local:'), 'config should NOT include auth.local without --auth');
+  });
+});
