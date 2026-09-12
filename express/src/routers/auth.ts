@@ -99,14 +99,18 @@ export function createBuiltinAuthRouter(opts: {
       const actor = buildActor(user, cfg);
       if (cfg.buildClaims) Object.assign(actor.claims, cfg.buildClaims(user));
 
+      // Create the session before signing so the access token carries the `sid`
+      // claim; without it `req.actor.sessionId` is undefined and logout cannot
+      // revoke the session.
+      const subject = Object.values(actor.subjects)[0]!;
+      const { sid, refreshToken } = await sessions.createSession({ subject, actor });
+      actor.sessionId = sid;
+
       const accessToken = signActorAccessTokenHS256({
         actor,
         secret: jwtCfg.accessSecret,
         ttlSeconds: parseTtlSeconds(jwtCfg.accessTtl),
       });
-
-      const subject = Object.values(actor.subjects)[0]!;
-      const { refreshToken } = await sessions.createSession({ subject, actor });
 
       return res.ok({ user, accessToken, refreshToken }, { code: 201 });
     } catch (e: unknown) {
@@ -142,13 +146,16 @@ export function createBuiltinAuthRouter(opts: {
       const actor = buildActor(user, cfg);
       if (cfg.buildClaims) Object.assign(actor.claims, cfg.buildClaims(user));
 
+      // See /register: the session must exist before the token is signed.
+      const subject = Object.values(actor.subjects)[0]!;
+      const { sid, refreshToken } = await sessions.createSession({ subject, actor });
+      actor.sessionId = sid;
+
       const accessToken = signActorAccessTokenHS256({
         actor,
         secret: jwtCfg.accessSecret,
         ttlSeconds: parseTtlSeconds(jwtCfg.accessTtl),
       });
-      const subject = Object.values(actor.subjects)[0]!;
-      const { refreshToken } = await sessions.createSession({ subject, actor });
 
       return res.ok({ accessToken, refreshToken });
     } catch (e: unknown) {
