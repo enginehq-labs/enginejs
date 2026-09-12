@@ -332,8 +332,13 @@ export const ops = {
 
   writeFileIfMissing(
     path.join(targetDir, 'routes', 'hello.ts'),
-    `export default function register({ app }: any) {
-  app.get('/api/hello', (_req: any, res: any) => res.ok({ message: 'hello from enginejs app' }));
+    `// The mount path comes from the file location plus engine.http.routesPath,
+// which defaults to '/api'. Declaring the full path here would mount this at
+// /api/hello/api/hello. Use a path override plus a relative route instead.
+export const path = '/api';
+
+export default function register({ app }: any) {
+  app.get('/hello', (_req: any, res: any) => res.ok({ message: 'hello from enginejs app' }));
 }
 `,
     force,

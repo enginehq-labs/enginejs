@@ -1,102 +1,86 @@
 import assert from 'node:assert';
 import test from 'node:test';
-import { createEngine } from '../../../../core/src/index.ts';
 import registerWorkflowSteps from '../../workflow/steps.ts';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+/**
+ * Covers the incrementClickCounter step that the aggregate-clicks workflow runs.
+ * The step reads event.after.link, loads that link, and increments total_clicks.
+ *
+ * This uses mocks only, so it needs no database.
+ */
+type StepFn = (args: { event: any }) => Promise<void>;
 
-test.skip('Workflow: aggregate-clicks increments Link.total_clicks', async () => {
-    // Mock Engine
-    const dsl: any = { 
-        link: { 
-            fields: { 
-                id: { type: 'int', primary: true },
-                total_clicks: { type: 'int', default: 0 }
-            }
-        },
-        analytics_event: {
-            fields: {
-                id: { type: 'int', primary: true },
-                link: { type: 'int' }
-            }
-        }
-    };
-    const config: any = {
-        app: { name: 'link-shortener', env: 'test' },
-        db: { url: 'postgres://localhost/db' },
-        dsl: { fragments: { modelsDir: 'x', metaDir: 'x' } },
-        auth: { jwt: { accessSecret: 'x', accessTtl: '1h' }, sessions: { enabled: false } },
-        acl: {},
-        rls: { subjects: {}, policies: {} },
-        http: { port: 3000 },
-        workflows: { enabled: true }
-    };    
+function buildEngine(opts: { link?: { id: number; total_clicks: number } | null }) {
+    const updates: Array<{ values: any; where: any }> = [];
+    const registered = new Map<string, () => unknown>();
+
     const engine: any = {
-        config,
-        dsl,
-        services: { 
-          resolve: (name: string) => {
-            if (name === 'pipelines') return { get: () => null };
-            if (name === 'workflows') return { get: () => null };
-            if (name === 'dsl') return dsl;
-            if (name === 'orm') return engine.orm;
-            if (name === 'crudService') {
-                return {
-                    list: async (args: any) => {
-                        if (args.modelKey === 'analytics_event' && args.query.filters === 'status:pending') {
-                            return { rows: [{ id: 101, link: 1 }] };
-                        }
-                        return { rows: [] };
-                    },
-                    update: async (args: any) => {
-                        if (args.modelKey === 'analytics_event' && args.id === 101) {
-                            // Mark as processed
-                            return { status: 'processed' };
-                        }
-                        throw new Error('Not found');
-                    },
-                    read: async (args: any) => {
-                        if (args.modelKey === 'link' && args.id === 1) {
-                            return { id: 1, total_clicks: 0 };
-                        }
-                        throw new Error('Not found');
-                    }
-                };
-            }
-            return {};
-          },
-          has: (name: string) => {
-            if (name === 'workflowEngine') return true;
-            return false;
-          }
+        services: {
+            register: (name: string, _scope: string, factory: () => unknown) => {
+                registered.set(name, factory);
+            },
+            resolve: (name: string) => {
+                if (name === 'orm') return engine.orm;
+                return {};
+            },
         },
         orm: {
-            sequelize: { Sequelize: { Op: {} } },
             models: {
                 link: {
-                    primaryKeyAttributes: ['id'],
-                    findOne: async (opts: any) => {
-                        if (opts.where.id === 1) {
-                            return { get: () => ({ id: 1, total_clicks: 0 }) };
-                        }
-                        return null;
-                    }
+                    findByPk: async (id: number) =>
+                        opts.link && opts.link.id === id ? { get: () => opts.link } : null,
+                    update: async (values: any, where: any) => {
+                        updates.push({ values, where });
+                    },
                 },
-                analytics_event: {
-                    primaryKeyAttributes: ['id'],
-                    findAll: async (opts: any) => {
-                        if (opts.where.status === 'pending') {
-                            return [{ get: () => ({ id: 101, link: 1, status: 'pending' }) }];
-                        }
-                        return [];
-                    }
-                },
-                workflow_events_outbox: {
-                    create: async () => {}
-                }
-            }
-        }
+            },
+        },
     };
+
+    return { engine, updates, registered };
+}
+
+async function loadStep(engine: any, registered: Map<string, () => unknown>): Promise<StepFn> {
+    await registerWorkflowSteps({ engine });
+    const factory = registered.get('workflows.step.incrementClickCounter');
+    assert.ok(factory, 'the step should be registered');
+    return factory!() as StepFn;
+}
+
+test('workflow: incrementClickCounter increments total_clicks on the link', async () => {
+    const { engine, updates, registered } = buildEngine({ link: { id: 1, total_clicks: 4 } });
+    const step = await loadStep(engine, registered);
+
+    await step({ event: { after: { id: 101, link: 1 } } });
+
+    assert.equal(updates.length, 1, 'the link should be updated once');
+    assert.equal(updates[0]!.values.total_clicks, 5, 'the counter should advance by one');
+    assert.deepEqual(updates[0]!.where, { where: { id: 1 } });
+});
+
+test('workflow: incrementClickCounter treats a missing counter as zero', async () => {
+    const { engine, updates, registered } = buildEngine({ link: { id: 1 } as any });
+    const step = await loadStep(engine, registered);
+
+    await step({ event: { after: { id: 101, link: 1 } } });
+
+    assert.equal(updates[0]!.values.total_clicks, 1);
+});
+
+test('workflow: incrementClickCounter does nothing when the event has no link', async () => {
+    const { engine, updates, registered } = buildEngine({ link: { id: 1, total_clicks: 0 } });
+    const step = await loadStep(engine, registered);
+
+    await step({ event: { after: { id: 101 } } });
+
+    assert.equal(updates.length, 0, 'no link id means no update');
+});
+
+test('workflow: incrementClickCounter does nothing when the link is gone', async () => {
+    const { engine, updates, registered } = buildEngine({ link: null });
+    const step = await loadStep(engine, registered);
+
+    await step({ event: { after: { id: 101, link: 999 } } });
+
+    assert.equal(updates.length, 0, 'a missing link must not be updated');
+});

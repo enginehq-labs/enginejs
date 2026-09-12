@@ -59,23 +59,33 @@ A complete example of a link shortener application built with EngineJS. This pro
 
 ## Usage API
 
+Generic CRUD is mounted at `/api/crud`, not at `/api`.
+
+The `link` and `analytics_event` models grant access to the `user` role only, so
+those requests need an `Authorization: Bearer <token>` header. The `user` model is
+open. This example has no login endpoint, so mint a token with
+`signActorAccessTokenHS256` from `@enginehq/auth`, using the secret in
+`JWT_SECRET` and `roles: ['user']`.
+
 - **Create User:**
-  `POST /api/user`
+  `POST /api/crud/user`
   ```json
   { "email": "me@example.com" }
   ```
 
-- **Create Link:**
-  `POST /api/link`
+- **Create Link:** (needs a bearer token)
+  `POST /api/crud/link`
   ```json
-  { "slug": "my-link", "url": "https://google.com", "owner": 1 }
+  { "slug": "my-link", "url": "https://google.com" }
   ```
+  The RLS create policy sets `owner` from the token, so do not send it.
 
 - **Visit Link:**
-  Open `http://localhost:3000/r/my-link` in your browser.
+  Open `http://localhost:3000/r/my-link` in your browser. No token is needed, because
+  a redirect is public.
 
-- **View Analytics:**
-  `GET /api/analytics_event?filters=link:1`
+- **View Analytics:** (needs a bearer token)
+  `GET /api/crud/analytics_event?filters=link:1`
 
 ## Testing
 
