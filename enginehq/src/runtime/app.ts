@@ -17,7 +17,11 @@ const ANON_ACTOR: Actor = { isAuthenticated: false, subjects: {}, roles: [], cla
 async function startEngineJsApp(cwd = process.cwd()): Promise<void> {
   const cfg = await loadEngineJsConfig(cwd);
   const engine = createEngine(cfg.engine);
-  
+  // Compiles the DSL and initializes the ORM. createEngineExpressApp resolves the
+  // dsl and orm services eagerly, so without this the app throws
+  // 'DSL not initialized (call engine.init())'.
+  await engine.init();
+
   // Autoload custom ops and steps if they exist
   const opsPath = path.join(cwd, 'pipeline', 'ops.ts');
   if (fs.existsSync(opsPath)) {
@@ -82,9 +86,23 @@ async function startEngineJsApp(cwd = process.cwd()): Promise<void> {
 
 
   const port = cfg.http.port || 3000;
-  app.listen(port, () => {
-    console.log(`[enginehq] listening on :${port}`);
-  });
+  const host = cfg.http.host;
+  const onListening = () => {
+    console.log(`[enginehq] listening on ${host ? `${host}:${port}` : `:${port}`}`);
+  };
+  if (host) app.listen(port, host, onListening);
+  else app.listen(port, onListening);
 }
 
 export { startEngineJsApp };
+
+// `enginehq start` and `enginehq dev` spawn this file directly, so it must run
+// itself when it is the entry point. Without this the process exits 0 having
+// started nothing. Same pattern as workflowsWorker.ts.
+const entry = process.argv[1];
+if (entry && import.meta.url === pathToFileURL(entry).href) {
+  startEngineJsApp().catch((e) => {
+    console.error('[enginehq] fatal', e);
+    process.exit(1);
+  });
+}
