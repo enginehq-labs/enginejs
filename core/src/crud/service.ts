@@ -1035,7 +1035,29 @@ export class CrudService {
       await attachJunctionIds({ orm, modelKey: args.modelKey, spec, pk, rows: [row] });
       await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row] });
     }
-    return pruneRowToDsl(spec, row);
+
+    // bypassAclRls skips ACL and RLS only. Pipelines still run, which matches the
+    // bypass branch of create(). Callers opt out with runPipelines or
+    // runResponsePipeline, as the workflow runner does.
+    // No ACL pruning here: that is what the bypass asks for.
+    const runPipelines = args.options?.runPipelines !== false;
+    const runResponsePipeline = args.options?.runResponsePipeline !== false;
+    let outRow = row;
+    if (runPipelines && runResponsePipeline) {
+      const registry = this.getPipelineRegistry();
+      const services = args.options?.services ?? this.pipelineServices();
+      outRow = this.pipelines.runPhase({
+        dsl,
+        registrySpec: registry?.get?.(args.modelKey),
+        action: 'read',
+        phase: 'response',
+        modelKey: args.modelKey,
+        actor: args.actor,
+        input: row as any,
+        services,
+      }).output;
+    }
+    return pruneRowToDsl(spec, outRow);
   }
 
   async update(args: CrudCtx & { modelKey: string; id: any; values: Record<string, unknown>; options?: CrudCallOptions }): Promise<Record<string, unknown>> {
