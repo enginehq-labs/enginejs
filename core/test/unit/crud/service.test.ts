@@ -200,3 +200,82 @@ test('CrudService: create wraps operation in transaction if junction fields pres
   assert.ok(transactionCalled, 'Transaction should have been initiated');
   assert.ok(joinCreateCalledWithTx, 'Junction creation should receive the transaction object');
 });
+
+/**
+ * bypassAclRls is named for ACL and RLS. It must not silently disable pipelines.
+ * create() already runs them in its bypass branch; read() did not, which meant a
+ * public read, such as a link-shortener redirect, recorded no analytics.
+ */
+function buildReadHarness() {
+  const dsl: DslRoot = {
+    link: {
+      fields: {
+        id: { type: 'int', primary: true },
+        slug: { type: 'string' },
+        url: { type: 'string' },
+      },
+    },
+  };
+
+  const orm: OrmInitResult = {
+    sequelize: { Sequelize: { Op: { and: Symbol('and') } } } as any,
+    models: {
+      link: {
+        primaryKeyAttributes: ['id'],
+        rawAttributes: { id: {}, slug: {}, url: {} },
+        associations: {},
+        findOne: async () => ({ id: 1, slug: 'my-link', url: 'https://example.com' }),
+      },
+    } as any,
+    junctionModels: {},
+    dsl,
+  };
+
+  const ran: Array<{ action: string; phase: string }> = [];
+  const services = new DefaultServiceRegistry();
+  services.register('dsl', 'singleton', () => dsl);
+  services.register('orm', 'singleton', () => orm);
+  services.register('config', 'singleton', () => ({}) as EngineConfig);
+  services.register('pipelines', 'singleton', () => ({
+    get: () => ({
+      read: {
+        response: [{ op: 'custom', name: 'recordClick' }],
+      },
+    }),
+  }));
+  services.register('pipelines.custom.recordClick', 'singleton', () => (ctx: any) => {
+    ran.push({ action: 'read', phase: 'response' });
+    return { output: ctx.input };
+  });
+
+  return { services, ran };
+}
+
+test('CrudService: read with bypassAclRls still runs the response pipeline', async () => {
+  const { services, ran } = buildReadHarness();
+  const service = new CrudService({ services });
+
+  const row = await service.read({
+    actor: { isAuthenticated: false, subjects: {}, roles: [], claims: {} },
+    modelKey: 'link',
+    id: 1,
+    options: { bypassAclRls: true },
+  });
+
+  assert.equal(ran.length, 1, 'the read response pipeline should run under bypass');
+  assert.equal(row.url, 'https://example.com');
+});
+
+test('CrudService: read with bypassAclRls honours runPipelines false', async () => {
+  const { services, ran } = buildReadHarness();
+  const service = new CrudService({ services });
+
+  await service.read({
+    actor: { isAuthenticated: false, subjects: {}, roles: [], claims: {} },
+    modelKey: 'link',
+    id: 1,
+    options: { bypassAclRls: true, runPipelines: false },
+  });
+
+  assert.equal(ran.length, 0, 'callers must still be able to opt out');
+});
