@@ -111,10 +111,11 @@ function resolveRoutePath(filePath: string, routesDir: string): string {
   if (!routePath.startsWith('/')) routePath = '/' + routePath;
   if (routePath.endsWith('/') && routePath.length > 1) routePath = routePath.slice(0, -1);
   
-  // Convert [param] to :param
-  // We no longer convert dynamic segments here, as the router itself handles them.
-  // routePath = routePath.replace(/\[([^\]]+)\]/g, ':$1'); 
-  
+  // Convert [param] to :param. Without this the mount keeps the literal brackets,
+  // which Express path-to-regexp reads as a regular expression character class:
+  // '/api/users/[id]' then matches only single characters from the set {i,d}.
+  routePath = routePath.replace(/\[([^\]]+)\]/g, ':$1');
+
   return routePath;
 }
 
@@ -152,7 +153,10 @@ export async function autoloadRoutes(args: { cwd: string; routesDir: string; app
     // Don't end with / if not root
     if (mountPath.endsWith('/') && mountPath.length > 1) mountPath = mountPath.slice(0, -1);
     
-    const router = express.Router();
+    // mergeParams exposes parameters from the mount path inside the router. A file
+    // such as routes/posts/[slug]/comments.ts mounts at '/posts/:slug/comments', so
+    // without this the module cannot read req.params.slug.
+    const router = express.Router({ mergeParams: true });
     await fn({ app: router as any, engine: args.engine });
     args.app.use(mountPath, router);
   }
