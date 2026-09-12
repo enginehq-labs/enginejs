@@ -3,16 +3,92 @@ import assert from 'node:assert';
 import { createEngine, CrudService } from '@enginehq/core';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import registerPipelineOps from '../../pipeline/ops.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-test('Security: ACL & RLS policies', async (t) => {
+function dockerAvailable(): boolean {
+    try {
+        execFileSync('docker', ['version'], { stdio: 'ignore' });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function isTruthy(v: unknown): boolean {
+    const s = String(v ?? '').trim().toLowerCase();
+    return s === '1' || s === 'true' || s === 'yes';
+}
+
+function ensureDockerImage(image: string): boolean {
+    try {
+        execFileSync('docker', ['image', 'inspect', image], { stdio: 'ignore' });
+        return true;
+    } catch {}
+
+    if (!isTruthy(process.env.ENGINEJS_DOCKER_PULL)) return false;
+
+    const timeoutMs = Number(process.env.ENGINEJS_DOCKER_PULL_TIMEOUT_MS || 30_000);
+    try {
+        execFileSync('docker', ['pull', image], { stdio: 'pipe', timeout: timeoutMs });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function startPostgresContainer(image: string, password: string, db: string): { id: string; port: number } {
+    const timeoutMs = Number(process.env.ENGINEJS_DOCKER_RUN_TIMEOUT_MS || 10_000);
+    const id = execFileSync(
+        'docker',
+        ['run', '-d', '--rm', '-e', `POSTGRES_PASSWORD=${password}`, '-e', `POSTGRES_DB=${db}`, '-p', '127.0.0.1::5432', image],
+        { encoding: 'utf8', timeout: timeoutMs },
+    ).trim();
+
+    const portLine = execFileSync('docker', ['port', id, '5432/tcp'], { encoding: 'utf8' }).trim();
+    const port = Number(portLine.split(':').pop());
+    if (!Number.isFinite(port) || port <= 0) throw new Error(`Failed to parse docker port: ${portLine}`);
+    return { id, port };
+}
+
+async function waitFor<T>(fn: () => Promise<T>, timeoutMs: number) {
+    const started = Date.now();
+    let lastErr: unknown = null;
+    while (Date.now() - started < timeoutMs) {
+        try {
+            return await fn();
+        } catch (e) {
+            lastErr = e;
+            await new Promise((r) => setTimeout(r, 250));
+        }
+    }
+    throw lastErr ?? new Error('Timed out');
+}
+
+test('docker postgres: Security: ACL & RLS policies', async (t) => {
+    if (!dockerAvailable()) return t.skip('Docker not available');
+
+    const image = process.env.ENGINEJS_TEST_PG_IMAGE || 'postgres:16-alpine';
+    if (!ensureDockerImage(image)) {
+        return t.skip(`Docker image not available: ${image} (pre-pull it, or set ENGINEJS_DOCKER_PULL=1)`);
+    }
+
+    const password = 'enginejs';
+    const dbName = 'enginejs_link_shortener_security';
+    const { id: containerId, port } = startPostgresContainer(image, password, dbName);
+    t.after(() => {
+        try {
+            execFileSync('docker', ['rm', '-f', containerId], { stdio: 'ignore' });
+        } catch {}
+    });
+
     const cwd = path.resolve(__dirname, '../../');
     const config = {
         app: { name: 'test', env: 'test' },
-        db: { url: 'sqlite::memory:', dialect: 'sqlite' },
+        db: { url: `postgres://postgres:${password}@127.0.0.1:${port}/${dbName}`, dialect: 'postgres' },
         dsl: {
             fragments: {
                 modelsDir: path.join(cwd, 'dsl/models'),
@@ -59,6 +135,7 @@ test('Security: ACL & RLS policies', async (t) => {
     await registerPipelineOps({ engine });
     
     // Sync DB
+    await waitFor(() => engine.orm.sequelize.authenticate(), 30_000);
     await engine.orm.sequelize.sync({ force: true });
 
     const crud = engine.services.resolve<CrudService>('crudService', { scope: 'singleton' });

@@ -12,8 +12,5 @@
   },
   "dependencies": {
     "enginehq": "file:../../enginehq"
-  },
-  "devDependencies": {
-    "sqlite3": "^5.1.7"
   }
 }

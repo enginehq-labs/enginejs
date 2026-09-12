@@ -4,9 +4,86 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import { execFileSync } from 'node:child_process';
 
 import { createEngine, LogManager, RequestContext } from '@enginehq/core';
 import { createEngineExpressApp } from '../../src/http/createEngineExpressApp.js';
+
+function dockerAvailable(): boolean {
+  try {
+    execFileSync('docker', ['version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isTruthy(v: unknown): boolean {
+  const s = String(v ?? '').trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes';
+}
+
+function ensureDockerImage(image: string): boolean {
+  try {
+    execFileSync('docker', ['image', 'inspect', image], { stdio: 'ignore' });
+    return true;
+  } catch {}
+
+  if (!isTruthy(process.env.ENGINEJS_DOCKER_PULL)) return false;
+
+  const timeoutMs = Number(process.env.ENGINEJS_DOCKER_PULL_TIMEOUT_MS || 30_000);
+  try {
+    execFileSync('docker', ['pull', image], { stdio: 'pipe', timeout: timeoutMs });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function startPostgresContainer(image: string, password: string, db: string): { id: string; port: number } {
+  const timeoutMs = Number(process.env.ENGINEJS_DOCKER_RUN_TIMEOUT_MS || 10_000);
+  const id = execFileSync(
+    'docker',
+    [
+      'run',
+      '-d',
+      '--rm',
+      '-e',
+      `POSTGRES_PASSWORD=${password}`,
+      '-e',
+      `POSTGRES_DB=${db}`,
+      '-p',
+      '127.0.0.1::5432',
+      image,
+    ],
+    { encoding: 'utf8', timeout: timeoutMs },
+  ).trim();
+
+  const portLine = execFileSync('docker', ['port', id, '5432/tcp'], { encoding: 'utf8' }).trim();
+  const portStr = portLine.split(':').pop();
+  const port = Number(portStr);
+  if (!Number.isFinite(port) || port <= 0) throw new Error(`Failed to parse docker port: ${portLine}`);
+
+  return { id, port };
+}
+
+async function sleep(ms: number) {
+  await new Promise((r) => setTimeout(r, ms));
+}
+
+async function waitFor<T>(fn: () => Promise<T>, timeoutMs: number) {
+  const started = Date.now();
+  let lastErr: unknown = null;
+  while (Date.now() - started < timeoutMs) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      await sleep(250);
+    }
+  }
+  throw lastErr ?? new Error('Timed out');
+}
 
 function listen(app: any) {
   const server = http.createServer(app);
@@ -53,8 +130,24 @@ async function request(url: string, opts: any = {}) {
   });
 }
 
-test('observability: end-to-end tracing with SQLite (HTTP -> DB -> Workflow)', async (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'enginejs-trace-sqlite-'));
+test('docker postgres: end-to-end tracing (HTTP -> DB -> Workflow)', async (t) => {
+  if (!dockerAvailable()) return t.skip('Docker not available');
+
+  const image = process.env.ENGINEJS_TEST_PG_IMAGE || 'postgres:16-alpine';
+  if (!ensureDockerImage(image)) {
+    return t.skip(`Docker image not available: ${image} (pre-pull it, or set ENGINEJS_DOCKER_PULL=1)`);
+  }
+
+  const password = 'enginejs';
+  const dbName = 'enginejs_observability_tracing';
+  const { id: containerId, port } = startPostgresContainer(image, password, dbName);
+  t.after(() => {
+    try {
+      execFileSync('docker', ['rm', '-f', containerId], { stdio: 'ignore' });
+    } catch {}
+  });
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'enginejs-trace-pg-'));
   const dslDir = path.join(root, 'dsl');
   const modelsDir = path.join(dslDir, 'models');
   const metaDir = path.join(dslDir, 'meta');
@@ -126,10 +219,13 @@ test('observability: end-to-end tracing with SQLite (HTTP -> DB -> Workflow)', a
     }
   };
 
-  const dbPath = path.join(root, 'test.sqlite');
   const engine = createEngine({
     app: { name: 'enginejs-trace-it', env: 'test' },
-    db: { url: `sqlite:${dbPath}`, logging: (sql: string) => sqlLogs.push(sql) },
+    db: {
+      url: `postgres://postgres:${password}@127.0.0.1:${port}/${dbName}`,
+      dialect: 'postgres',
+      logging: (sql: string) => sqlLogs.push(sql),
+    },
     dsl: { fragments: { modelsDir, metaDir } },
     auth: {
       jwt: { accessSecret: 'x', accessTtl: '1h' },
@@ -159,6 +255,7 @@ test('observability: end-to-end tracing with SQLite (HTTP -> DB -> Workflow)', a
 
   await engine.init();
   const sequelize = engine.services.resolve<any>('db', { scope: 'singleton' });
+  await waitFor(() => sequelize.authenticate(), 30_000);
   await sequelize.sync({ force: true });
 
   const app = await createEngineExpressApp(engine, {
@@ -202,10 +299,12 @@ test('observability: end-to-end tracing with SQLite (HTTP -> DB -> Workflow)', a
     const outRow = await outbox.findOne({ where: { model: 'post', action: 'create' }, raw: true });
     assert.equal(outRow.trace_id, customTraceId, 'Outbox row should have trace_id stored');
 
-    // 5. Verify SQL logs for comments
-    // NOTE: Sequelize's options.comment might not be supported in SQLite dialect for all query types.
-    // console.log('SQL Logs sample:', sqlLogs);
-    // const traceSql = sqlLogs.filter(sql => sql.includes(`traceId=${customTraceId}`));
+    // 5. SQL comment propagation is NOT asserted.
+    // initSequelizeModelsFromDsl sets `options.comment = traceId=...` on its hooks,
+    // but the comment does not reach the logged SQL. This was previously annotated
+    // as a SQLite dialect limitation; it reproduces on Postgres too, so the cause is
+    // the instrumentation, not the dialect. Left unasserted until that is fixed.
+    // const traceSql = sqlLogs.filter((sql) => sql.includes(`traceId=${customTraceId}`));
     // assert.ok(traceSql.length > 0, 'Should have SQL queries with traceId comment');
 
   } finally {
