@@ -5,8 +5,8 @@
   "type": "module",
   "workspaces": [
     "core",
-    "express",
     "auth",
+    "express",
     "enginehq"
   ],
   "scripts": {

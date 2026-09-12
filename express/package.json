@@ -17,6 +17,7 @@
     }
   },
   "dependencies": {
+    "@enginehq/auth": "0.1.2",
     "@enginehq/core": "0.1.2",
     "express": "^4.21.2"
   },

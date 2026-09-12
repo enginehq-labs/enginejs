@@ -33,6 +33,11 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Workspaces resolve each other through their built dist/ output, so nothing
+      # typechecks on a clean checkout until this runs.
+      - name: Build
+        run: npm run build
+
       - name: Typecheck
         run: npm run typecheck
 
