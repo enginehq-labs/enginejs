@@ -9,6 +9,9 @@ export default {
     dsl: {
       fragments: { modelsDir: 'dsl/models', metaDir: 'dsl/meta' },
     },
+    // Mount file-based routes at the root, so routes/r/[slug].ts serves /r/:slug.
+    // The default prefix is '/api'.
+    http: { routesPath: '/' },
     auth: { jwt: { accessSecret: process.env.JWT_SECRET || 'dev', accessTtl: '1h' } },
     acl: {},
     rls: {
