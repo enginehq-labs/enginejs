@@ -237,7 +237,7 @@ test('docker postgres: workflow managed via CRUD updates runtime behavior', asyn
   const sequelize = engine.services.resolve<any>('db', { scope: 'singleton' });
   await waitFor(() => sequelize.authenticate(), 30_000);
 
-  const app = createEngineExpressApp(engine, {
+  const app = await createEngineExpressApp(engine, {
     defaultActor: { isAuthenticated: true, subjects: {}, roles: ['admin'], claims: {} },
   });
 

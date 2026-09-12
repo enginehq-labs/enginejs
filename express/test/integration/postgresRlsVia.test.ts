@@ -234,7 +234,7 @@ test('docker postgres: RLS via chain scopes list/read through joins', async (t) 
   await OrderItem.create({ order_id: o1.id, name: 'only-mine' });
   await OrderItem.create({ order_id: o2.id, name: 'not-mine' });
 
-  const app = createEngineExpressApp(engine, {
+  const app = await createEngineExpressApp(engine, {
     defaultActor: {
       isAuthenticated: true,
       subjects: { customer: { type: 'customer', model: 'customer', id: c1.id } },

@@ -222,7 +222,7 @@ test('docker postgres: workflow db.update is blocked by RLS for inherit actor', 
   await waitFor(() => sequelize.authenticate(), 30_000);
   await sequelize.sync({ force: true });
 
-  const app = createEngineExpressApp(engine, {
+  const app = await createEngineExpressApp(engine, {
     defaultActor: {
       isAuthenticated: true,
       subjects: { customer: { type: 'customer', model: 'customer', id: 1 } },
@@ -384,7 +384,7 @@ test('docker postgres: workflow db.update bypasses ACL/RLS for system actor', as
   await waitFor(() => sequelize.authenticate(), 30_000);
   await sequelize.sync({ force: true });
 
-  const app = createEngineExpressApp(engine, {
+  const app = await createEngineExpressApp(engine, {
     defaultActor: {
       isAuthenticated: true,
       subjects: { customer: { type: 'customer', model: 'customer', id: 1 } },

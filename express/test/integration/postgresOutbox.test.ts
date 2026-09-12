@@ -205,7 +205,7 @@ test('docker postgres: create -> pipeline -> outbox row inserted', async (t) => 
   await waitFor(() => sequelize.authenticate(), 30_000);
   await sequelize.sync({ force: true });
 
-  const app = createEngineExpressApp(engine, {
+  const app = await createEngineExpressApp(engine, {
     defaultActor: { isAuthenticated: true, subjects: {}, roles: ['admin'], claims: {} },
   });
 
@@ -358,7 +358,7 @@ test('docker postgres: workflowRunner processes outbox and runs db.update step',
   await waitFor(() => sequelize.authenticate(), 30_000);
   await sequelize.sync({ force: true });
 
-  const app = createEngineExpressApp(engine, {
+  const app = await createEngineExpressApp(engine, {
     defaultActor: { isAuthenticated: true, subjects: {}, roles: ['admin'], claims: {} },
   });
 

@@ -171,7 +171,7 @@ test('docker postgres: POST /admin/sync creates tables so CRUD can insert; deny 
   const sequelize = engine.services.resolve<any>('db', { scope: 'singleton' });
   await waitFor(() => sequelize.authenticate(), 30_000);
 
-  const app = createEngineExpressApp(engine, {
+  const app = await createEngineExpressApp(engine, {
     defaultActor: { isAuthenticated: true, subjects: {}, roles: ['admin'], claims: {} },
   });
 
@@ -213,7 +213,7 @@ test('docker postgres: POST /admin/sync creates tables so CRUD can insert; deny 
     assert.equal(createBody.data.title, 'Hello');
 
     // Deny uses hideExistence (404) for non-admin actor.
-    const app2 = createEngineExpressApp(engine, {
+    const app2 = await createEngineExpressApp(engine, {
       defaultActor: { isAuthenticated: true, subjects: {}, roles: ['user'], claims: {} },
     });
     const { server: s2, url: url2 } = await listen(app2);

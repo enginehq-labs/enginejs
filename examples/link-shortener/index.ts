@@ -28,7 +28,7 @@ async function start() {
     await autoloadPipelines({ cwd, pipelinesDir: autoload.pipelinesDir ?? 'pipeline', services });
     await autoloadWorkflows({ cwd, workflowsDir: autoload.workflowsDir ?? 'workflow', registry: workflows });
 
-    const app = createEngineExpressApp(engine);
+    const app = await createEngineExpressApp(engine);
     
     // Custom routes
     await registerRedirectRoutes({ app, engine });
