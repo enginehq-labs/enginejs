@@ -134,14 +134,19 @@ test('docker postgres: Security: ACL & RLS policies', async (t) => {
     await engine.init();
     await registerPipelineOps({ engine });
     
+    // engine.init() populates orm, but the type is nullable until then.
+    const orm = engine.orm;
+    assert.ok(orm, 'engine.init() should have initialized the ORM');
+
     // Sync DB
-    await waitFor(() => engine.orm.sequelize.authenticate(), 30_000);
-    await engine.orm.sequelize.sync({ force: true });
+    await waitFor(() => orm.sequelize.authenticate(), 30_000);
+    await orm.sequelize.sync({ force: true });
 
     const crud = engine.services.resolve<CrudService>('crudService', { scope: 'singleton' });
 
     // Create users (Directly via model to avoid ACL/RLS if we hadn't set user to public, but user is public create)
-    const User = engine.orm.models.user;
+    const User = orm.models.user;
+    assert.ok(User, 'the user model should exist');
     const userA = await User.create({ email: 'userA@example.com' });
     const userB = await User.create({ email: 'userB@example.com' });
 
@@ -172,7 +177,8 @@ test('docker postgres: Security: ACL & RLS policies', async (t) => {
     assert.equal(linkA.owner, userA.dataValues.id, 'Owner should be set to User A');
 
     // Create Analytics Event for Link A (using ORM to simulate system creation)
-    const Analytics = engine.orm.models.analytics_event;
+    const Analytics = orm.models.analytics_event;
+    assert.ok(Analytics, 'the analytics_event model should exist');
     await Analytics.create({ link: linkA.id, ip: '127.0.0.1' });
 
     // 2. Read Link A as User A (should allow)

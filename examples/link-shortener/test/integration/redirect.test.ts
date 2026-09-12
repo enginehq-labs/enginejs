@@ -46,6 +46,11 @@ test('Redirection: /api/r/:slug redirects to URL', async () => {
         dsl,
         services: { 
           resolve: (name: string) => {
+            if (name === 'logger') {
+                // The observability middleware calls logger.info on every request.
+                // Without this the mock returns {} and every request fails with a 500.
+                return { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
+            }
             if (name === 'pipelines') return { get: () => null };
             if (name === 'workflows') return { get: () => null };
             if (name === 'dsl') return dsl;

@@ -34,6 +34,9 @@ export default async function registerRedirectRoutes({ app, engine }: { app: Exp
             }
 
             const link = listResult.rows[0];
+            if (!link) {
+                return res.status(404).json({ success: false, message: 'Link not found' });
+            }
 
             // Use CrudService.read to trigger the 'read' pipeline automatically.
             // The bypass is required: a redirect is public, but link.json grants read

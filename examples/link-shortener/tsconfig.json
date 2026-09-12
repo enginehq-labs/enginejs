@@ -2,6 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "moduleResolution": "NodeNext",
+    // The example imports sibling modules with an explicit .ts extension, which is
+    // how tsx runs them. Without this tsc reports TS5097 on every such import.
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "outDir": "dist"
   },
   "include": ["**/*.ts"]

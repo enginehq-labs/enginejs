@@ -70,6 +70,11 @@ test('Pipeline: recordClick creates AnalyticsEvent', async () => {
               }
           },
           resolve: (name: string) => {
+            if (name === 'logger') {
+                // The observability middleware calls logger.info on every request.
+                // Without this the mock returns {} and every request fails with a 500.
+                return { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
+            }
             if (name === 'pipelines') {
                 return {
                     runPhase: (args: any) => {
