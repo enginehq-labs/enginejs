@@ -244,7 +244,7 @@ test('docker postgres: RLS via chain scopes list/read through joins', async (t) 
   });
   const { server, url } = await listen(app);
   try {
-    const listRes = await fetch(`${url}/api/order_item`);
+    const listRes = await fetch(`${url}/api/crud/order_item`);
     const listBody = (await listRes.json()) as any;
     assert.equal(listRes.status, 200);
     assert.equal(listBody.success, true);
@@ -252,7 +252,7 @@ test('docker postgres: RLS via chain scopes list/read through joins', async (t) 
     assert.equal(listBody.data[0].name, 'only-mine');
 
     const id = listBody.data[0].id;
-    const readRes = await fetch(`${url}/api/order_item/${id}`);
+    const readRes = await fetch(`${url}/api/crud/order_item/${id}`);
     const readBody = (await readRes.json()) as any;
     assert.equal(readRes.status, 200);
     assert.equal(readBody.data.name, 'only-mine');

@@ -248,7 +248,7 @@ test('docker postgres: workflow managed via CRUD updates runtime behavior', asyn
     assert.equal(syncRes.status, 200);
 
     // Create a workflow via generic CRUD; registry is updated on afterPersist.
-    const createWfRes = await fetch(`${url}/api/workflow`, {
+    const createWfRes = await fetch(`${url}/api/crud/workflow`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -280,7 +280,7 @@ test('docker postgres: workflow managed via CRUD updates runtime behavior', asyn
     await runner.runOnce({ claimLimit: 10 });
 
     // Create a post -> outbox event -> runner executes workflow -> comment created with v1.
-    const postRes1 = await fetch(`${url}/api/post`, {
+    const postRes1 = await fetch(`${url}/api/crud/post`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'hello' }),
@@ -296,7 +296,7 @@ test('docker postgres: workflow managed via CRUD updates runtime behavior', asyn
     assert.equal(comments1[0].body, 'v1');
 
     // Update workflow spec to v2 via CRUD; registry is updated on afterPersist.
-    const patchRes = await fetch(`${url}/api/workflow/${workflowId}`, {
+    const patchRes = await fetch(`${url}/api/crud/workflow/${workflowId}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -318,7 +318,7 @@ test('docker postgres: workflow managed via CRUD updates runtime behavior', asyn
     // Clear the workflow model update event so the next run only processes the post create.
     await runner.runOnce({ claimLimit: 10 });
 
-    const postRes2 = await fetch(`${url}/api/post`, {
+    const postRes2 = await fetch(`${url}/api/crud/post`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'hello2' }),

@@ -188,7 +188,7 @@ test('docker postgres: POST /admin/sync creates tables so CRUD can insert; deny 
     assert.equal(dryBody.success, true);
     assert.equal(dryBody.data.dryRun, true);
 
-    const createFail = await fetch(`${url}/api/post`, {
+    const createFail = await fetch(`${url}/api/crud/post`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'Hello' }),
@@ -202,7 +202,7 @@ test('docker postgres: POST /admin/sync creates tables so CRUD can insert; deny 
     assert.equal(syncBody.success, true);
     assert.equal(syncBody.data.dryRun, false);
 
-    const createRes = await fetch(`${url}/api/post`, {
+    const createRes = await fetch(`${url}/api/crud/post`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'Hello' }),

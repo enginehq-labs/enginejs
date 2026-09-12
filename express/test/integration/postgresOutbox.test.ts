@@ -211,7 +211,7 @@ test('docker postgres: create -> pipeline -> outbox row inserted', async (t) => 
 
   const { server, url } = await listen(app);
   try {
-    const res = await fetch(`${url}/api/post`, {
+    const res = await fetch(`${url}/api/crud/post`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: '  Hello  ' }),
@@ -364,7 +364,7 @@ test('docker postgres: workflowRunner processes outbox and runs db.update step',
 
   const { server, url } = await listen(app);
   try {
-    const res = await fetch(`${url}/api/post`, {
+    const res = await fetch(`${url}/api/crud/post`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: '  Hello  ' }),

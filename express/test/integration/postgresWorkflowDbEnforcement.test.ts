@@ -233,7 +233,7 @@ test('docker postgres: workflow db.update is blocked by RLS for inherit actor', 
 
   const { server, url } = await listen(app);
   try {
-    const res = await fetch(`${url}/api/post`, {
+    const res = await fetch(`${url}/api/crud/post`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ customer_id: 2 }),
@@ -395,7 +395,7 @@ test('docker postgres: workflow db.update bypasses ACL/RLS for system actor', as
 
   const { server, url } = await listen(app);
   try {
-    const res = await fetch(`${url}/api/post`, {
+    const res = await fetch(`${url}/api/crud/post`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ customer_id: 2 }),
