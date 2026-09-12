@@ -45,6 +45,18 @@ describe('initEngineJsApp', () => {
     assert.ok(config.includes('userModel:'), 'config should include userModel in auth.local');
   });
 
+  it('scaffolds a hello route that does not double the /api prefix', () => {
+    const dir = path.join(tmpDir, 'route-app');
+    initEngineJsApp({ dir, name: 'route-app' });
+
+    const route = fs.readFileSync(path.join(dir, 'routes', 'hello.ts'), 'utf8');
+    // autoloadRoutes prefixes the mount with engine.http.routesPath, default '/api'.
+    // A route declaring the full '/api/hello' would be served at /api/hello/api/hello.
+    assert.ok(route.includes("export const path = '/api'"), 'should declare a path override');
+    assert.ok(route.includes("app.get('/hello'"), 'the handler path should be relative');
+    assert.ok(!route.includes("app.get('/api/hello'"), 'must not repeat the /api prefix');
+  });
+
   it('scaffolds the auth_session meta model with --auth', () => {
     const dir = path.join(tmpDir, 'auth-session-app');
     initEngineJsApp({ dir, name: 'auth-session-app', auth: true });
