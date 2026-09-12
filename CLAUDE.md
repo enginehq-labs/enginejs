@@ -2,6 +2,10 @@
 
 Instructions for Claude Code and other AI agents in this repository.
 
+Read `AGENTS.md` for the project facts: the packages, the commands, the build order,
+the PostgreSQL-only constraint, and the testing rules. This file holds the
+communication rules, which apply on top of them.
+
 ## Communication style
 
 Write all communication in ASD-STE-100 Simplified Technical English (STE).

@@ -1,40 +1,168 @@
-# AGENTS.md — EngineJS (Conductor-Driven Monorepo)
+# AGENTS.md
 
-## Runtime & Environment
+Instructions for AI agents that work in the EngineJS repository.
 
-- **Strict Node.js Version:** This project strictly targets **Node.js 22+**. 
-- Always ensure you are using the correct version by running `nvm use 22` before executing any commands (tests, builds, etc.).
-- Do not use features or flags that are incompatible with Node.js 22.
+Claude Code reads `CLAUDE.md` first. That file holds the communication rules.
+This file holds the project facts.
 
-## Source of truth
+## What EngineJS is
 
-This project uses [Conductor](https://github.com/gemini-cli-extensions/conductor) for development. The source of truth for the product vision, technical stack, and development workflow is the `conductor/` directory.
+EngineJS is a schema-as-code TypeScript and Express backend framework. You define
+models, access control lists (ACL), and row-level security (RLS) in a JSON DSL. The
+framework generates Sequelize models and generic CRUD endpoints. It adds pluggable
+pipelines, durable outbox-backed workflows, and structured tracing.
 
-- **Product Vision:** `conductor/product.md`
-- **Guidelines:** `conductor/product-guidelines.md`
-- **Tech Stack:** `conductor/tech-stack.md`
-- **Workflow:** `conductor/workflow.md`
-- **Tracks & Plans:** `conductor/tracks.md` and `conductor/tracks/<track_id>/plan.md`
+The status is Technical Preview. The API can change.
+
+## Runtime
+
+- The project targets Node.js 22 or later. Run `nvm use 22` before any command.
+- Do not use features or flags that Node.js 22 does not support.
+- The project uses ES modules. Every package sets `"type": "module"`.
+
+## Packages
+
+The repository is an npm workspace with four published packages:
+
+| Package | Directory | Purpose |
+|---|---|---|
+| `@enginehq/core` | `core/` | DSL, ORM, ACL and RLS, pipelines, workflows, migrations, CrudService |
+| `@enginehq/auth` | `auth/` | JWT HS256, password hashing, refresh sessions |
+| `@enginehq/express` | `express/` | Express adapter, middleware, HTTP CRUD, admin and auth routers |
+| `enginehq` | `enginehq/` | CLI and app runtime, and an umbrella re-export |
+
+The `examples/` directory holds sample apps. It is not part of the workspace.
+
+## Commands
+
+Run these from the repository root:
+
+```bash
+npm run build         # build every package, in dependency order
+npm run typecheck     # tsc --noEmit in every package
+npm run test:unit     # unit tests
+npm run test:integration  # integration tests, needs Docker
+npm test              # unit tests, then integration tests
+```
+
+## Build order matters
+
+The packages resolve each other through their built `dist/` output, not through
+source. The `workspaces` array in the root `package.json` sets the order:
+
+```
+core, auth, express, enginehq
+```
+
+Two results follow:
+
+1. On a clean checkout you must run `npm run build` before `npm run typecheck`.
+   Nothing typechecks until the packages are built.
+2. After you edit a package, rebuild it before another package sees the change.
+   `enginehq start` runs `dist/runtime/app.js`, not the source.
+
+### The stale tsbuildinfo trap
+
+`core/tsconfig.json` sets `"composite": true`. If you delete `dist/` but leave
+`tsconfig.tsbuildinfo`, tsc reads the buildinfo, decides the output is current, and
+emits nothing. You then get `Cannot find module '@enginehq/core'`, which looks like a
+dependency problem but is a skipped emit.
+
+To force a full rebuild, delete both:
+
+```bash
+rm -rf */dist && find . -name "*.tsbuildinfo" -not -path "*/node_modules/*" -delete
+npm run build
+```
+
+## Database
+
+**EngineJS supports PostgreSQL only.** The config type permits one value:
+`dialect?: 'postgres'`. The codebase has no dialect guards. SQLite was removed.
+
+Do not add support for another database without a decision from the repository owner.
+
+## Testing
+
+- Unit tests use `node:test`. They need no external service.
+- Integration tests start their own PostgreSQL containers through the Docker CLI.
+  Docker must run.
+
+Run the integration tests like this:
+
+```bash
+ENGINEJS_DOCKER_PULL=1 npm run test:integration
+```
+
+**A skipped test is a failure, not a pass.** When Docker is absent, each test reports
+`ok N - ... # SKIP` and the process exits 0. The suite then reads as green while it
+asserts nothing. `ENGINEJS_DOCKER_PULL=1` lets the harness pull the image when it is
+missing. `.github/workflows/ci.yml` fails the build if any test reports a skip.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on each push to `main` and on each pull request. The
+steps are install, build, typecheck, unit tests, integration tests, and the skip guard.
 
 ## Development model
 
-EngineJS has transitioned from a spec-driven codegen model to a **standard code-first monorepo** managed by Conductor.
+EngineJS is a code-first monorepo. The code in `core/`, `auth/`, `express/`, and
+`enginehq/` is the source of truth for the implementation.
 
-- Code in `core/`, `express/`, `auth/`, and `enginehq/` is now the primary source of truth for implementation.
-- All changes must be tracked through Conductor Tracks.
-- Each track must have a corresponding `spec.md` and `plan.md` in its directory under `conductor/tracks/`.
+Track work in **GitHub issues**. Do not create process directories, track files, spec
+files, or plan files in the repository.
 
-## Quality Gates
+This replaces the previous Conductor workflow. Issue #1 removes the remaining
+`conductor/` directory.
 
-All changes must pass the quality gates defined in `conductor/workflow.md`, which include:
-- Test-Driven Development (TDD)
-- >80% test coverage
-- Strict adherence to the documented tech stack
-- Automated and manual verification phases
+## Quality gates
 
-## Editing rules
+- Write the test before the implementation. Confirm the test fails first.
+- Cover new code. Aim for more than 80 percent.
+- Prefer non-interactive commands. Use `CI=true` for tools that watch files.
+- Run `npm run typecheck` and `npm test` before you open a pull request.
+- Report results honestly. If a test fails, say so and show the output.
 
-- Follow the sequential task list in the active track's `plan.md`.
-- Mark tasks as in-progress `[~]` and completed `[x]` as work proceeds.
-- Commit frequently after completing individual tasks.
-- Perform phase-level verification and checkpointing as prescribed by the workflow.
+## Code style
+
+Match the style of the code around you. Keep the same comment density, naming, and
+idiom as the file you edit.
+
+Reference documents:
+
+- `conductor/code_styleguides/typescript.md`
+- `conductor/code_styleguides/javascript.md`
+- `conductor/code_styleguides/general.md`
+
+These files describe the Google TypeScript style. The repository does not follow every
+rule in them. For example, route modules and pipeline operations use default exports,
+which that guide forbids. Where the guide and the surrounding code disagree, follow the
+surrounding code.
+
+Issue #1 moves these files out of `conductor/`.
+
+## Framework documentation
+
+The prose documentation for the framework lives in `conductor/framework/`:
+
+| File | Subject |
+|---|---|
+| `overview.md` | the framework as a whole |
+| `dsl.md` | the JSON model DSL |
+| `lifecycle.md` | engine startup and initialization |
+| `adapter.md` | the Express adapter and the app entry point |
+| `auth.md` | JWT, actors, sessions, and the built-in auth routes |
+| `pipelines.md` | transforms, validators, and custom operations |
+| `workflows.md` | the outbox, the runner, the scheduler |
+| `security.md` | ACL and RLS |
+| `observability.md` | logging and request tracing |
+| `maintenance.md` | outbox retention and cleanup |
+
+Issue #1 moves these files to `docs/`.
+
+## Git
+
+- Do not add attribution lines to commit messages or pull request descriptions.
+- Use conventional commit subjects, such as `fix(runtime): ...` or `docs: ...`.
+- Explain the cause in the commit body, not only the change.
+- Commit only when the user asks.
