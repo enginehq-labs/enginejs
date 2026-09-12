@@ -35,7 +35,18 @@ Notes:
 5) Create GitHub release
    - `gh release create vX.Y.Z --title "vX.Y.Z" --notes-file specs/99-changelog.md`
 
-## CI/automation (future)
+## CI
+
+`.github/workflows/ci.yml` runs typecheck, unit tests and integration tests on
+every push to `main` and every pull request.
+
+The integration suite starts its own Postgres containers through the Docker CLI,
+so CI sets `ENGINEJS_DOCKER_PULL=1` to let the harness pull the image. It then
+fails the build if any integration test reported `# SKIP`: a skipped test still
+exits 0, so an environment where Docker is unavailable would otherwise read as a
+green pass while testing nothing.
+
+## Publishing automation (future)
 
 If you want non-interactive publishing:
 

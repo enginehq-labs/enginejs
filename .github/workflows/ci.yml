@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      # The integration suite starts its own Postgres containers through the Docker
+      # CLI. Without this the harness treats a missing image as "Docker unavailable"
+      # and skips — see the "no silent skips" step below for why that matters.
+      ENGINEJS_DOCKER_PULL: '1'
+      ENGINEJS_DOCKER_PULL_TIMEOUT_MS: '180000'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # EngineJS targets Node 22+ (node:test, current ESM behaviour).
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Pre-pull Postgres image
+        run: docker pull postgres:16-alpine
+
+      - name: Integration tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:integration 2>&1 | tee integration.log
+
+      # A skipped test reports as `ok N - ... # SKIP`, so an environment where every
+      # Docker test skips still exits 0 and reads as a pass. The suite is expected to
+      # run in full here, so treat any skip as a failure rather than trusting the
+      # summary line.
+      - name: Assert no silent skips
+        shell: bash
+        run: |
+          if grep -q '# SKIP' integration.log; then
+            echo "::error::Integration tests were skipped — the suite must run in full in CI."
+            grep '# SKIP' integration.log
+            exit 1
+          fi
+          echo "No skipped integration tests."
+
+      - name: Upload integration log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-log
+          path: integration.log
+          if-no-files-found: ignore
