@@ -45,6 +45,40 @@ describe('initEngineJsApp', () => {
     assert.ok(config.includes('userModel:'), 'config should include userModel in auth.local');
   });
 
+  it('scaffolds the auth_session meta model with --auth', () => {
+    const dir = path.join(tmpDir, 'auth-session-app');
+    initEngineJsApp({ dir, name: 'auth-session-app', auth: true });
+
+    const sessionModelPath = path.join(dir, 'dsl', 'meta', 'auth_session.json');
+    assert.ok(fs.existsSync(sessionModelPath), 'auth_session.json should exist with --auth');
+
+    const model = JSON.parse(fs.readFileSync(sessionModelPath, 'utf8'));
+    const fields = model.auth_session.fields;
+    // These are the columns SequelizeAuthSessionStore reads and writes.
+    for (const f of [
+      'id',
+      'subject_type',
+      'subject_model',
+      'subject_id',
+      'refresh_hash',
+      'refresh_expires_at',
+      'revoked',
+      'revoked_at',
+    ]) {
+      assert.ok(fields[f], `auth_session should declare '${f}'`);
+    }
+    assert.equal(fields.id.primary, true, 'id should be the primary key');
+  });
+
+  it('does NOT scaffold auth_session without --auth', () => {
+    const dir = path.join(tmpDir, 'no-session-app');
+    initEngineJsApp({ dir, name: 'no-session-app' });
+    assert.ok(
+      !fs.existsSync(path.join(dir, 'dsl', 'meta', 'auth_session.json')),
+      'auth_session.json should NOT exist without --auth',
+    );
+  });
+
   it('does NOT scaffold user.json without --auth', () => {
     const dir = path.join(tmpDir, 'no-auth-app');
     initEngineJsApp({ dir, name: 'no-auth-app' });

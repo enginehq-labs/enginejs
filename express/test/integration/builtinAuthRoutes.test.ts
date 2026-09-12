@@ -178,6 +178,28 @@ test('docker postgres: builtin auth register -> login -> refresh -> logout flow'
     }),
   );
 
+  // Present => the router auto-selects SequelizeAuthSessionStore over in-memory.
+  fs.writeFileSync(
+    path.join(metaDir, 'auth_session.json'),
+    JSON.stringify({
+      auth_session: {
+        fields: {
+          id: { type: 'uuid', primary: true },
+          subject_type: { type: 'string' },
+          subject_model: { type: 'string' },
+          subject_id: { type: 'string', canfind: true },
+          refresh_hash: { type: 'string', length: 255 },
+          refresh_expires_at: { type: 'datetime' },
+          revoked: { type: 'boolean', default: false },
+          revoked_at: { type: 'datetime' },
+          device_token: { type: 'string' },
+        },
+        indexes: { unique: [], many: [['subject_id']], lower: [] },
+        access: { read: [], create: [], update: [], delete: [] },
+      },
+    }),
+  );
+
   fs.writeFileSync(
     path.join(metaDir, 'dsl.json'),
     JSON.stringify({
@@ -335,6 +357,11 @@ test('docker postgres: builtin auth register -> login -> refresh -> logout flow'
     assert.equal(res.status, 401);
   });
 
+  await t.test('sessions are persisted to the auth_session table', async () => {
+    const rows = await sequelize.query('SELECT id, revoked FROM auth_session', { type: 'SELECT' });
+    assert.ok(rows.length > 0, 'login/register should have written session rows to the DB');
+  });
+
   await t.test('logout invalidates the session behind the refresh token', async () => {
     const res = await request(`${url}/auth/logout`, {
       method: 'POST',
@@ -345,5 +372,8 @@ test('docker postgres: builtin auth register -> login -> refresh -> logout flow'
 
     const after = await request(`${url}/auth/refresh`, { method: 'POST', body: { refreshToken } });
     assert.equal(after.status, 401, 'refresh must fail once the session is revoked by logout');
+
+    const revoked = await sequelize.query('SELECT id FROM auth_session WHERE revoked = true', { type: 'SELECT' });
+    assert.ok(revoked.length > 0, 'logout should mark the session row revoked in the DB');
   });
 });

@@ -57,7 +57,21 @@ export type EngineConfig = {
   };
   auth: {
     jwt: { accessSecret: string; accessTtl: string };
-    sessions?: { enabled: boolean; refreshTtlDays: number; refreshRotate: boolean };
+    sessions?: {
+      enabled: boolean;
+      refreshTtlDays: number;
+      refreshRotate: boolean;
+      /**
+       * Which session store backs refresh tokens.
+       *  - 'auto' (default): use the DB model when it exists, else in-memory
+       *  - 'model': require the DB model; fail fast if it is missing
+       *  - 'memory': always in-memory (single process only)
+       * A store registered in the ServiceRegistry as 'authSessionStore' overrides this.
+       */
+      store?: 'auto' | 'model' | 'memory';
+      /** DSL meta model backing DB sessions. Default: 'auth_session' */
+      modelKey?: string;
+    };
     /** Built-in local auth routes. When set, /auth/register, /auth/login etc. are auto-mounted. */
     local?: AuthLocalConfig;
   };

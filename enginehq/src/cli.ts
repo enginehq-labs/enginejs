@@ -303,6 +303,31 @@ export const ops = {
       },
       force,
     );
+
+    // Durable sessions: without this meta model the built-in auth routes fall back
+    // to an in-memory store that loses sessions on restart and cannot be shared
+    // across processes.
+    writeJsonIfMissing(
+      path.join(targetDir, 'dsl', 'meta', 'auth_session.json'),
+      {
+        auth_session: {
+          fields: {
+            id: { type: 'uuid', primary: true },
+            subject_type: { type: 'string' },
+            subject_model: { type: 'string' },
+            subject_id: { type: 'string', canfind: true },
+            refresh_hash: { type: 'string', length: 255 },
+            refresh_expires_at: { type: 'datetime' },
+            revoked: { type: 'boolean', default: false },
+            revoked_at: { type: 'datetime' },
+            device_token: { type: 'string' },
+          },
+          indexes: { unique: [], many: [['subject_id']], lower: [] },
+          access: { read: [], create: [], update: [], delete: [] },
+        },
+      },
+      force,
+    );
   }
 
   writeFileIfMissing(

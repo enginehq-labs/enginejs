@@ -8,7 +8,9 @@ import {
   verifyPasswordHash,
   signActorAccessTokenHS256,
   InMemoryAuthSessionStore,
+  SequelizeAuthSessionStore,
   SessionService,
+  type AuthSessionStore,
 } from '@enginehq/auth';
 
 const DEFAULT_EMAIL_FIELD = 'email';
@@ -16,6 +18,7 @@ const DEFAULT_PASSWORD_FIELD = 'password';
 const DEFAULT_HASH_FIELD = 'password_hash';
 const DEFAULT_ROLES_FIELD = 'roles';
 const DEFAULT_SUBJECT_KEY = 'user';
+const DEFAULT_SESSION_MODEL = 'auth_session';
 
 /** Parse human-readable TTL strings: '15m', '1h', '7d' → seconds. */
 function parseTtlSeconds(ttl: string): number {
@@ -62,6 +65,75 @@ const SYSTEM_ACTOR: Actor = {
   claims: {},
 };
 
+/**
+ * Picks the session store backing refresh tokens.
+ *
+ * Order of precedence:
+ *   1. a store registered in the ServiceRegistry as 'authSessionStore' (bring your
+ *      own — Redis, a custom table, a test double)
+ *   2. auth.sessions.store: 'memory' forces in-memory, 'model' requires the DB model
+ *   3. 'auto' (the default): the DB model when it exists, in-memory otherwise
+ *
+ * The in-memory store keeps sessions in process memory: they are lost on restart
+ * and are not shared across workers, so logout and refresh rotation only hold for
+ * a single process. That is fine for tests and local development and wrong for
+ * anything else, which is why the fallback is logged.
+ */
+export function resolveSessionStore(args: {
+  config: EngineConfig;
+  services: ServiceRegistry;
+}): { store: AuthSessionStore; kind: string } {
+  const { config, services } = args;
+  const cfg = config.auth.sessions;
+
+  if (services.has('authSessionStore')) {
+    return {
+      store: services.resolve<AuthSessionStore>('authSessionStore', { scope: 'singleton' }),
+      kind: 'custom (authSessionStore service)',
+    };
+  }
+
+  const mode = cfg?.store ?? 'auto';
+  const modelKey = cfg?.modelKey ?? DEFAULT_SESSION_MODEL;
+
+  if (mode === 'memory') return { store: new InMemoryAuthSessionStore(), kind: 'memory (configured)' };
+
+  const model = services.has('orm')
+    ? ((services.resolve<any>('orm', { scope: 'singleton' })?.models ?? {})[modelKey] ?? null)
+    : null;
+
+  if (model) return { store: new SequelizeAuthSessionStore({ model }), kind: `model (${modelKey})` };
+
+  if (mode === 'model') {
+    throw new Error(
+      `auth.sessions.store is 'model' but the '${modelKey}' model is missing. ` +
+        `Add dsl/meta/${modelKey}.json, or set auth.sessions.store to 'memory'.`,
+    );
+  }
+
+  return { store: new InMemoryAuthSessionStore(), kind: 'memory (no model found)' };
+}
+
+/** Resolves the store and reports the choice, warning when the fallback is unsafe. */
+export function resolveAndLogSessionStore(args: {
+  config: EngineConfig;
+  services: ServiceRegistry;
+}): { store: AuthSessionStore; kind: string } {
+  const resolved = resolveSessionStore(args);
+  if (!args.services.has('logger')) return resolved;
+
+  const logger = args.services.resolve<any>('logger', { scope: 'singleton' });
+  const msg = `[auth] session store: ${resolved.kind}`;
+  if (resolved.kind.startsWith('memory') && args.config.auth.sessions?.enabled) {
+    logger?.warn?.(
+      `${msg} — sessions are per-process and lost on restart; not safe for multi-process deployments`,
+    );
+  } else {
+    logger?.info?.(msg);
+  }
+  return resolved;
+}
+
 export function createBuiltinAuthRouter(opts: {
   local: AuthLocalConfig;
   config: EngineConfig;
@@ -73,7 +145,7 @@ export function createBuiltinAuthRouter(opts: {
   const router = Router();
 
   const sessionCfg = config.auth.sessions ?? { enabled: false, refreshTtlDays: 7, refreshRotate: true };
-  const sessionStore = new InMemoryAuthSessionStore();
+  const { store: sessionStore } = resolveAndLogSessionStore({ config, services });
   const sessions = new SessionService({ store: sessionStore, config: sessionCfg });
 
   // ── POST /auth/register ──────────────────────────────────────────────────

@@ -107,6 +107,42 @@ For applications requiring stateful control over logins, EngineJS provides a `Se
 3. **Rotation**: The `rotateRefreshToken` method validates a refresh token and generates a new pair.
 4. **Revocation**: Sessions can be revoked individually by ID or globally for a specific subject (e.g., "log out from all devices").
 
+### Session Stores
+The built-in auth routes select a session store automatically. Precedence:
+
+1. **Custom** — a store registered in the ServiceRegistry as `authSessionStore`. Anything
+   implementing `AuthSessionStore` works (Redis, a bespoke table, a test double).
+2. **Configured** — `auth.sessions.store`:
+   - `'memory'` always uses the in-memory store
+   - `'model'` requires the DB model and throws at startup if it is missing
+3. **Auto** (the default) — the DB model when it exists, in-memory otherwise.
+
+```ts
+auth: {
+  jwt: { accessSecret: process.env.JWT_SECRET!, accessTtl: '15m' },
+  sessions: {
+    enabled: true,
+    refreshTtlDays: 7,
+    refreshRotate: true,
+    store: 'auto',            // 'auto' | 'model' | 'memory'
+    modelKey: 'auth_session', // DSL meta model backing DB sessions
+  },
+  local: { userModel: 'user' },
+}
+```
+
+The chosen store is logged at startup. Falling back to in-memory while
+`sessions.enabled` is true logs a **warning**: that store keeps sessions in process
+memory, so they are lost on restart and are not shared between workers — logout and
+refresh rotation then only hold within a single process. Use it for tests and local
+development only.
+
+`enginehq init --auth` scaffolds `dsl/meta/auth_session.json`, so a new app gets
+durable sessions with no extra configuration. To add it to an existing app, create
+that meta model with the fields `SequelizeAuthSessionStore` reads: `id` (uuid,
+primary), `subject_type`, `subject_model`, `subject_id`, `refresh_hash`,
+`refresh_expires_at`, `revoked`, `revoked_at`, `device_token`.
+
 ## Security Hardening
 - **Timing-Safe Equality**: Signature verification uses `crypto.timingSafeEqual` to prevent timing attacks.
 - **Stateless/Stateful Hybrid**: Access tokens are stateless for performance, but the inclusion of a `sid` allows for near-real-time revocation checks via middleware.
