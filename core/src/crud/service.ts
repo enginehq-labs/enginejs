@@ -10,7 +10,8 @@ import type { DslModelSpec, DslRoot } from '../dsl/types.js';
 import { isDslModelSpec } from '../dsl/types.js';
 import { PipelineEngine } from '../pipelines/engine.js';
 import type { WorkflowEngine } from '../workflows/engine.js';
-import type { PipelineRegistry, ServiceRegistry } from '../services/types.js';
+import type { PipelineRegistry, ServiceRegistry, WorkflowRegistry } from '../services/types.js';
+import { validateWorkflowSpec } from '../workflows/validate.js';
 import { parseListQuery } from '../query/parser.js';
 import { QueryParseError } from '../query/errors.js';
 import type { FilterExpr, ListQueryAst, SortSpec } from '../query/types.js';
@@ -509,7 +510,50 @@ export class CrudService {
     };
   }
 
+  /**
+   * Keeps the runtime workflow registry in step with the DB-backed workflow model.
+   *
+   * With `workflows.registry: 'db'` the registry is otherwise only populated once,
+   * by loadFromDb() during engine.init(). Rows written afterwards — created,
+   * edited, enabled or disabled through CRUD — must be reflected immediately, or
+   * the runner will not see them.
+   *
+   * Lives here rather than in the Express router so it applies to every entry
+   * point (HTTP, workflow steps, the built-in auth router, direct service calls).
+   */
+  private syncWorkflowRegistryFromRow(args: { modelKey: string; before: any; after: any }): void {
+    const config = this.getConfig();
+    const wf = config.workflows as any;
+    if (!wf?.enabled) return;
+    if (String(wf.registry || '') !== 'db') return;
+    if (args.modelKey !== String(wf.db?.modelKey || 'workflow')) return;
+    if (!this.deps.services.has('workflows')) return;
+
+    const registry = this.deps.services.resolve<WorkflowRegistry>('workflows', { scope: 'singleton' });
+    if (!registry?.register) return;
+
+    const beforeSlug = args.before ? String(args.before.slug || args.before.name || '').trim() : '';
+    const slug = args.after ? String(args.after.slug || args.after.name || '').trim() : '';
+
+    // A renamed workflow must drop its previous slug.
+    if (beforeSlug && beforeSlug !== slug) registry.register(beforeSlug, null);
+
+    if (!slug) return;
+
+    // Deleted, disabled, or invalid specs unregister rather than register.
+    const enabled = args.after ? args.after.enabled !== false : false;
+    if (!enabled) return registry.register(slug, null);
+
+    const spec = args.after ? (args.after.spec ?? null) : null;
+    if (!validateWorkflowSpec(spec).ok) return registry.register(slug, null);
+
+    registry.register(slug, spec);
+  }
+
   private async emitWorkflow(args: { modelKey: string; action: 'create' | 'update' | 'delete'; before: any; after: any; actor?: any; origin?: string | undefined; originChain?: string[] | undefined; parentEventId?: string | number | undefined }) {
+    // Runs at every persist completion (create/update/delete, ACL and bypass paths).
+    this.syncWorkflowRegistryFromRow({ modelKey: args.modelKey, before: args.before, after: args.after });
+
     if (!this.deps.services.has('workflowEngine')) return;
     const config = this.getConfig();
     if (!config.workflows?.enabled) return;

@@ -10,7 +10,6 @@ import {
   RlsEngine,
   rlsWhereToSequelize,
   SequelizeWorkflowOutboxStore,
-  validateWorkflowSpec,
   WorkflowEngine,
   isDslModelSpec,
   parseListQuery,
@@ -620,53 +619,6 @@ function getPipelineRegistry(req: Request): any | null {
   const svcs = (req as any).services;
   if (!svcs?.has?.('pipelines')) return null;
   return svcs.get('pipelines');
-}
-
-function workflowsEnabled(config: EngineConfig): boolean {
-  return !!config.workflows && (config.workflows as any).enabled !== false;
-}
-
-function workflowsUseDbRegistry(config: EngineConfig): boolean {
-  return workflowsEnabled(config) && String((config.workflows as any).registry || '') === 'db';
-}
-
-function getWorkflowModelKey(config: EngineConfig): string {
-  const wk = (config.workflows as any)?.db?.modelKey;
-  return String(wk || 'workflow');
-}
-
-function getWorkflowRegistry(req: Request): any | null {
-  const svcs = (req as any).services;
-  if (!svcs?.has?.('workflows')) return null;
-  return svcs.get('workflows');
-}
-
-function syncWorkflowRegistryFromRow(args: {
-  req: Request;
-  config: EngineConfig;
-  modelKey: string;
-  before: Record<string, unknown> | null;
-  after: Record<string, unknown> | null;
-}) {
-  if (!workflowsUseDbRegistry(args.config)) return;
-  if (args.modelKey !== getWorkflowModelKey(args.config)) return;
-
-  const registry = getWorkflowRegistry(args.req);
-  if (!registry?.register) return;
-
-  const beforeSlug = args.before ? String((args.before as any).slug || (args.before as any).name || '').trim() : '';
-  const slug = args.after ? String((args.after as any).slug || (args.after as any).name || '').trim() : '';
-  if (beforeSlug && beforeSlug !== slug) registry.register(beforeSlug, null);
-
-  if (!slug) return;
-  const enabled = args.after ? (args.after as any).enabled !== false : false;
-  if (!enabled) return registry.register(slug, null);
-
-  const spec = args.after ? ((args.after as any).spec ?? null) : null;
-  const val = validateWorkflowSpec(spec);
-  if (!val.ok) return registry.register(slug, null);
-
-  registry.register(slug, spec);
 }
 
 function getWorkflowEngine(orm: OrmInitResult): WorkflowEngine | null {
