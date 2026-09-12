@@ -22,9 +22,9 @@ jobs:
       ENGINEJS_DOCKER_PULL_TIMEOUT_MS: '180000'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           # EngineJS targets Node 22+ (node:test, current ESM behaviour).
           node-version: '22'
@@ -69,7 +69,7 @@ jobs:
 
       - name: Upload integration log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: integration-log
           path: integration.log
