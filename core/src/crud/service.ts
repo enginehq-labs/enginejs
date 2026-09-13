@@ -1015,6 +1015,19 @@ export class CrudService {
         input: row,
         services,
       }).output;
+
+      if (args.options?.runResponsePipeline !== false) {
+        row = this.pipelines.runPhase({
+          dsl,
+          registrySpec: registry?.get?.(args.modelKey),
+          action: 'create',
+          phase: 'response',
+          modelKey: args.modelKey,
+          actor: args.actor,
+          input: row,
+          services,
+        }).output;
+      }
     }
     await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row as any] });
     await this.emitWorkflow({ modelKey: args.modelKey, action: 'create', before: null, after: row, actor: args.actor, origin: args.origin, originChain: args.originChain, parentEventId: args.parentEventId });

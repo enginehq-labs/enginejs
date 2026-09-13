@@ -509,3 +509,19 @@ test('CrudService: list with bypassAclRls honours runResponsePipeline false', as
 
   assert.deepEqual(ran, []);
 });
+
+test('CrudService: create with bypassAclRls runs every phase, response included', async () => {
+  const { service, ran, actor } = buildPhaseHarness();
+
+  await service.create({ actor, modelKey: 'link', values: { slug: 'a' }, options: { bypassAclRls: true } });
+
+  assert.deepEqual(ran, ['create.beforeValidate', 'create.validate', 'create.beforePersist', 'create.afterPersist', 'create.response']);
+});
+
+test('CrudService: create with bypassAclRls honours runResponsePipeline false', async () => {
+  const { service, ran, actor } = buildPhaseHarness();
+
+  await service.create({ actor, modelKey: 'link', values: { slug: 'a' }, options: { bypassAclRls: true, runResponsePipeline: false } });
+
+  assert.deepEqual(ran, ['create.beforeValidate', 'create.validate', 'create.beforePersist', 'create.afterPersist']);
+});
