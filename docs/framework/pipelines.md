@@ -4,7 +4,7 @@
 EngineJS use a pluggable Pipeline architecture to transform, validate, and process data during the request lifecycle. Pipelines are composed of discrete "Ops" (operations) that run within specific "Phases" for each CRUD action.
 
 ## Pipeline Phases
-For `create` and `update` without a bypass, the phases run in the order below. `read` and `list` run only `response`. `delete` runs no phase. With `bypassAclRls`, `create` runs every phase except `response`, `update` and `list` run no phase, and `read` runs `response`.
+For `create` and `update`, the phases run in the order below. `read` and `list` run only `response`. `delete` runs `afterPersist`, then `response`. `bypassAclRls` does not change the phases. The `runPipelines: false` option skips every phase, and `runResponsePipeline: false` skips `response`.
 
 1. **`beforeValidate`**: Initial data sanitization and transformation (e.g., trimming strings, setting defaults).
 2. **`validate`**: Data integrity checks. The field validators check all fields, then throw one `PipelineValidationError` with one error for each field. The `workflowSpec` validator and a missing validator service throw at once.

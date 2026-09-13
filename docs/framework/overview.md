@@ -31,7 +31,7 @@ The framework follows a 3-stage lifecycle:
 
 1. **Bootstrap (`createEngine`)**: Services are registered, and the container is initialized.
 2. **Initialization (`engine.init`)**: The DSL is compiled, validated, and used to generate the ORM schema. Plugins are hooked into the ready state.
-3. **Execution**: The system handles requests (HTTP or internal). A create or an update follows this order: **Security -> pre-persist pipelines -> Persistence -> `afterPersist` and `response` pipelines -> Outbox event -> Response**. With `bypassAclRls`, an update skips the security check and every pipeline. A delete runs the security check, the soft delete and the outbox event. It runs no pipeline. See [Adapter & CRUD Service](adapter.md).
+3. **Execution**: The system handles requests (HTTP or internal). A create or an update follows this order: **Security -> pre-persist pipelines -> Persistence -> `afterPersist` and `response` pipelines -> Outbox event -> Response**. With `bypassAclRls`, a create or an update skips the security check and runs the same pipelines. A delete runs the security check, the soft delete, the `afterPersist` and `response` pipelines, and the outbox event. See [Adapter & CRUD Service](adapter.md).
 
 ## Module Index
 - [DSL Compilation & ORM Init](dsl.md)

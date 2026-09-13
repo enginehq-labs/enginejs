@@ -66,3 +66,11 @@ test('enginehq initEngineJsApp writes no default JWT secret', () => {
     assert.match(cfg, /accessSecret: process\.env\.JWT_SECRET \?\? ''/, `auth: ${auth}`);
   }
 });
+
+test('enginehq initEngineJsApp --auth removes password_hash from the delete response', () => {
+  const appDir = path.join(tmpDir(), 'my-app');
+  initEngineJsApp({ dir: appDir, auth: true });
+
+  const models = JSON.parse(fs.readFileSync(path.join(appDir, 'dsl', 'models', 'user.json'), 'utf8'));
+  assert.deepEqual(models.user.pipelines.delete, { response: [{ op: 'remove', fields: ['password_hash'] }] });
+});

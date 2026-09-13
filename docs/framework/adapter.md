@@ -98,18 +98,18 @@ An error response is `{ "success": false, "code", "message", "errors" }`.
 The `CrudService` in `@enginehq/core` is the engine-room of data operations. It is designed to be usable both as an HTTP backend and as a service for internal system tasks (e.g., within workflows).
 
 ### Operation Lifecycle
-For `create` and `update`, the service runs the steps below. `delete` runs step 1, marks the row deleted, and emits the workflow event. It runs no pipeline.
-1. **Security Check**: Executes ACL and RLS checks against the current actor. `bypassAclRls` skips this step. On `update` it also skips every pipeline step.
+For `create` and `update`, the service runs the steps below. `delete` runs step 1, marks the row deleted, runs steps 7 and 8, and emits the workflow event with the row as stored.
+1. **Security Check**: Executes ACL and RLS checks against the current actor. `bypassAclRls` skips this step.
 2. **Pre-Validation Pipeline**: Runs the `beforeValidate` phase (sanitization, defaults).
 3. **Validation Pipeline**: Runs the `validate` phase (business rules, required fields).
 4. **Pre-Persist Pipeline**: Runs the `beforePersist` phase.
 5. **Persistence**: Maps DSL fields to Sequelize attributes and executes the database operation.
 6. **Junction Updates**: Manages many-to-many associations for `multi: true` foreign keys.
 7. **Post-Persist Pipeline**: Runs the `afterPersist` phase.
-8. **Response Pipeline**: Runs the `response` phase (redaction). The bypass path of `create` skips this phase, and the bypass path of `update` skips steps 2, 3, 4, 7 and 8.
+8. **Response Pipeline**: Runs the `response` phase (redaction).
 9. **Pruning**: Drops keys that are not DSL fields, include aliases or `*_auto_name` keys. System fields such as `deleted` stay.
 10. **Workflow Emission**: Emits an event to the `workflow_events_outbox` if workflows are enabled. Where a response phase runs, the event comes after it. The event comes before pruning for `update`, and for the bypass path of `create`.
 
 ### Internal vs External Calls
 - **External (HTTP)**: Triggered by the Express router. It always enforces ACL and RLS, and runs the pipelines of the action.
-- **Internal (Workflows/Plugins)**: Resolve the service with `engine.services.resolve('crudService', { scope: 'singleton' })`. Call options: `bypassAclRls` skips ACL and RLS (and every pipeline on `update`), `runPipelines: false` skips all pipelines, and `runResponsePipeline: false` skips the response phase. No option skips one other phase.
+- **Internal (Workflows/Plugins)**: Resolve the service with `engine.services.resolve('crudService', { scope: 'singleton' })`. Call options: `bypassAclRls` skips ACL and RLS, `runPipelines: false` skips all pipelines, and `runResponsePipeline: false` skips the response phase. No option skips one other phase.
