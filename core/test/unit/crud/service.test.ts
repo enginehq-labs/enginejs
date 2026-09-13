@@ -376,3 +376,46 @@ test('CrudService: update in enforce mode keeps the enforced field after the pip
   assert.equal(persisted.length, 1);
   assert.equal(persisted[0]!.customer_id, 7, 'a pipeline op must not replace an enforced field');
 });
+
+function recordInfoLogs(services: DefaultServiceRegistry) {
+  const lines: Array<{ msg: string; meta: any }> = [];
+  services.register('logger', 'singleton', () => ({
+    info: (msg: string, meta?: any) => lines.push({ msg, meta }),
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+  }));
+  return lines;
+}
+
+test('CrudService: a bypassAclRls call writes one audit log line', async () => {
+  const { services } = buildReadHarness();
+  const lines = recordInfoLogs(services);
+  const service = new CrudService({ services });
+  const actor = {
+    isAuthenticated: true,
+    subjects: { user: { type: 'user', model: 'user', id: 5 } },
+    roles: ['system'],
+    claims: { email: 'person@example.com' },
+  };
+
+  await service.read({ actor, modelKey: 'link', id: 1, origin: 'test-origin', options: { bypassAclRls: true } });
+
+  const audits = lines.filter((l) => l.msg === '[crud] audited bypass');
+  assert.equal(audits.length, 1);
+  // Claims can hold personal data, so the log line must not contain them.
+  assert.deepEqual(audits[0]!.meta, { model: 'link', action: 'read', origin: 'test-origin', subjects: ['user:5'], roles: ['system'] });
+});
+
+test('CrudService: a call with no bypass writes no audit log line', async () => {
+  const { services } = buildReadHarness();
+  const lines = recordInfoLogs(services);
+  const service = new CrudService({ services });
+
+  // The outcome of the read does not matter here. Only the log matters.
+  await service
+    .read({ actor: { isAuthenticated: false, subjects: {}, roles: [], claims: {} }, modelKey: 'link', id: 1 })
+    .catch(() => {});
+
+  assert.equal(lines.filter((l) => l.msg === '[crud] audited bypass').length, 0);
+});

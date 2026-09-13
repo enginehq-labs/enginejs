@@ -19,7 +19,7 @@ import type { FilterExpr, ListQueryAst, SortSpec } from '../query/types.js';
 import { PipelineValidationError } from '../pipelines/errors.js';
 
 import { CrudBadRequestError, CrudForbiddenError, CrudNotFoundError } from './errors.js';
-import type { CrudCallOptions, CrudCtx, CrudListQuery, CrudListResult } from './types.js';
+import type { CrudAction, CrudCallOptions, CrudCtx, CrudListQuery, CrudListResult } from './types.js';
 import { stripVirtualFields, pruneUnknownPayload, normalizePayloadMultiFields, computeChangedFields } from './utils.js';
 
 function getSequelizeLib(orm: OrmInitResult) {
@@ -533,6 +533,19 @@ export class CrudService {
     return this.deps.services.resolve('pipelines', { scope: 'singleton' }) as PipelineRegistry;
   }
 
+  /** Writes one audit line for each bypassAclRls call. Claims can hold personal data, so they are left out. */
+  private logBypass(action: CrudAction, args: CrudCtx & { modelKey: string }): void {
+    if (!this.deps.services.has('logger')) return;
+    const logger = this.deps.services.resolve<any>('logger', { scope: 'singleton' });
+    logger.info('[crud] audited bypass', {
+      model: args.modelKey,
+      action,
+      origin: args.origin,
+      subjects: Object.values(args.actor?.subjects || {}).map((s) => `${s.type}:${s.id}`),
+      roles: args.actor?.roles || [],
+    });
+  }
+
   private pipelineServices() {
     const svcs = this.deps.services;
     return {
@@ -613,6 +626,7 @@ export class CrudService {
     const { Op } = getSequelizeLib(orm);
 
     const bypass = args.options?.bypassAclRls === true;
+    if (bypass) this.logBypass('list', args);
     if (!bypass) {
       const acl = new AclEngine();
       const aclRes = acl.can({ actor: args.actor, modelKey: args.modelKey, modelSpec: spec, action: 'read' });
@@ -795,6 +809,7 @@ export class CrudService {
     const model = getModel(orm, args.modelKey);
 
     const bypass = args.options?.bypassAclRls === true;
+    if (bypass) this.logBypass('create', args);
     if (!bypass) {
       const acl = new AclEngine();
       const aclRes = acl.can({ actor: args.actor, modelKey: args.modelKey, modelSpec: spec, action: 'create' });
@@ -997,6 +1012,7 @@ export class CrudService {
     const pk = getPrimaryKeyField(model);
 
     const bypass = args.options?.bypassAclRls === true;
+    if (bypass) this.logBypass('read', args);
     if (!bypass) {
       const acl = new AclEngine();
       const aclRes = acl.can({ actor: args.actor, modelKey: args.modelKey, modelSpec: spec, action: 'read' });
@@ -1112,6 +1128,7 @@ export class CrudService {
     const pk = getPrimaryKeyField(model);
 
     const bypass = args.options?.bypassAclRls === true;
+    if (bypass) this.logBypass('update', args);
     if (!bypass) {
       const acl = new AclEngine();
       const aclRes = acl.can({ actor: args.actor, modelKey: args.modelKey, modelSpec: spec, action: 'update' });
@@ -1271,6 +1288,7 @@ export class CrudService {
     const pk = getPrimaryKeyField(model);
 
     const bypass = args.options?.bypassAclRls === true;
+    if (bypass) this.logBypass('delete', args);
     if (!bypass) {
       const acl = new AclEngine();
       const aclRes = acl.can({ actor: args.actor, modelKey: args.modelKey, modelSpec: spec, action: 'delete' });
