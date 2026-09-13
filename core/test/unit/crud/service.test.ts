@@ -552,3 +552,37 @@ test('CrudService: update with bypassAclRls honours runPipelines false', async (
 
   assert.deepEqual(ran, []);
 });
+
+test('CrudService: delete runs afterPersist, then response', async () => {
+  const { service, ran, actor } = buildPhaseHarness();
+
+  await service.delete({ actor, modelKey: 'link', id: 1 });
+
+  assert.deepEqual(ran, ['delete.afterPersist', 'delete.response']);
+});
+
+test('CrudService: delete with bypassAclRls runs afterPersist, then response', async () => {
+  const { service, ran, actor } = buildPhaseHarness();
+
+  await service.delete({ actor, modelKey: 'link', id: 1, options: { bypassAclRls: true } });
+
+  assert.deepEqual(ran, ['delete.afterPersist', 'delete.response']);
+});
+
+test('CrudService: a remove op in delete.response keeps the field out of the returned row', async () => {
+  const { service, spec, actor } = buildPhaseHarness();
+  spec.delete!.response!.push({ op: 'remove', fields: ['secret'] });
+
+  const row = await service.delete({ actor, modelKey: 'link', id: 1, options: { bypassAclRls: true } });
+
+  assert.equal(row.slug, 'my-link');
+  assert.equal('secret' in row, false, 'password_hash style fields must not reach the caller');
+});
+
+test('CrudService: delete honours runPipelines false', async () => {
+  const { service, ran, actor } = buildPhaseHarness();
+
+  await service.delete({ actor, modelKey: 'link', id: 1, options: { bypassAclRls: true, runPipelines: false } });
+
+  assert.deepEqual(ran, []);
+});

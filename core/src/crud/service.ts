@@ -546,6 +546,32 @@ export class CrudService {
     });
   }
 
+  /** Runs delete.afterPersist, then delete.response, on the soft-deleted row. */
+  private runDeletePhases(
+    args: CrudCtx & { modelKey: string; options?: CrudCallOptions },
+    row: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (args.options?.runPipelines === false) return row;
+    const dsl = this.getDsl();
+    const registry = this.getPipelineRegistry();
+    const services = args.options?.services ?? this.pipelineServices();
+    const run = (phase: 'afterPersist' | 'response', input: Record<string, unknown>) =>
+      this.pipelines.runPhase({
+        dsl,
+        registrySpec: registry?.get?.(args.modelKey),
+        action: 'delete',
+        phase,
+        modelKey: args.modelKey,
+        actor: args.actor,
+        input,
+        services,
+      }).output;
+
+    let out = run('afterPersist', row);
+    if (args.options?.runResponsePipeline !== false) out = run('response', out);
+    return out;
+  }
+
   private pipelineServices() {
     const svcs = this.deps.services;
     return {
@@ -1405,8 +1431,10 @@ export class CrudService {
       if (!existing) throw new CrudNotFoundError('Not found');
       await (existing as any).update({ deleted: true, deleted_at: new Date() });
       const row = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
+      const out = this.runDeletePhases(args, row);
+      // The event keeps the row as stored, not the response output.
       await this.emitWorkflow({ modelKey: args.modelKey, action: 'delete', before: row, after: null, actor: args.actor, origin: args.origin, originChain: args.originChain, parentEventId: args.parentEventId });
-      return pruneRowToDsl(spec, new AclEngine().pruneRead(row));
+      return pruneRowToDsl(spec, new AclEngine().pruneRead(out));
     }
 
     const where = { [pk]: args.id } as any;
@@ -1414,8 +1442,9 @@ export class CrudService {
     if (!existing) throw new CrudNotFoundError('Not found');
     await (existing as any).update({ deleted: true, deleted_at: new Date() });
     const row = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
+    const out = this.runDeletePhases(args, row);
     await this.emitWorkflow({ modelKey: args.modelKey, action: 'delete', before: row, after: null, actor: args.actor, origin: args.origin, originChain: args.originChain, parentEventId: args.parentEventId });
-    return pruneRowToDsl(spec, row);
+    return pruneRowToDsl(spec, out);
   }
 
   static toCrudError(e: unknown): CrudBadRequestError | CrudForbiddenError | CrudNotFoundError | null {
