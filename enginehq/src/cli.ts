@@ -294,7 +294,7 @@ export const ops = {
           },
           indexes: { unique: [['email']], many: [], lower: [] },
           // hashPassword hashes the virtual password on every create and update.
-          // remove keeps password_hash out of every response.
+          // remove keeps password_hash out of every response, delete included.
           pipelines: {
             create: {
               beforePersist: [{ op: 'custom', name: 'hashPassword' }],
@@ -304,6 +304,7 @@ export const ops = {
               beforePersist: [{ op: 'custom', name: 'hashPassword' }],
               response: [{ op: 'remove', fields: ['password_hash'] }],
             },
+            delete: { response: [{ op: 'remove', fields: ['password_hash'] }] },
             read: { response: [{ op: 'remove', fields: ['password_hash'] }] },
             list: { response: [{ op: 'remove', fields: ['password_hash'] }] },
           },
