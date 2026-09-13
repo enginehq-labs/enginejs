@@ -7,14 +7,14 @@ EngineJS is a specs-driven TypeScript + Express backend framework for building s
 - pipelines (transforms/validators/plugins)
 - workflows + durable outbox + scheduler/replayer/retention
 
-> Status: **Technical Preview (v0.1.2)** — Active development; APIs may change. Not production-ready yet.
+> Status: **Technical Preview (v0.1.2)**: Active development; APIs may change. Not production-ready yet.
 
 ## Packages
 
-- `@enginehq/core` — core runtime (DSL, ORM, ACL/RLS, pipelines, workflows, migrations, core CRUD service)
-- `@enginehq/auth` — JWT HS256 + optional refresh sessions (rotation/revocation)
-- `@enginehq/express` — Express adapter (middleware, envelope, generic HTTP CRUD, admin endpoints)
-- `enginehq` — unscoped umbrella re-export
+- `@enginehq/core`: core runtime (DSL, ORM, ACL/RLS, pipelines, workflows, migrations, core CRUD service)
+- `@enginehq/auth`: JWT HS256 + optional refresh sessions (rotation/revocation)
+- `@enginehq/express`: Express adapter (middleware, envelope, generic HTTP CRUD, admin endpoints)
+- `enginehq`: unscoped umbrella re-export
 
 ## Install
 
