@@ -66,7 +66,15 @@ type AuthLocalConfig = {
 ```
 
 ### Password Handling
-The `password` field must be declared as `"save": false` in the DSL (virtual field — never written to the DB). The built-in `hashPassword` pipeline op intercepts it during `beforePersist` and writes the PBKDF2/bcrypt hash to `passwordHashField` automatically.
+Declare the `password` field as `"save": false` in the DSL. It is a virtual field, so the database never stores it.
+
+- `/auth/register` hashes the password with PBKDF2-SHA256 and writes the hash to `passwordHashField`. It ignores a `roles` value in the request body.
+- For CRUD writes, declare the `hashPassword` pipeline op in `create.beforePersist` and `update.beforePersist`: `{ "op": "custom", "name": "hashPassword" }`. The optional `args` are `from` (default `password`) and `to` (default `password_hash`). The auth router registers the op when `auth.local` is set, unless the app already registers `pipelines.custom.hashPassword`.
+- To keep the hash out of API responses, add `{ "op": "remove", "fields": ["password_hash"] }` to the `create`, `update`, `read` and `list` response phases.
+- `/auth/login` finds the user with an exact match on `emailField`. That lookup runs no pipeline, so login can verify the hash when the response phases remove it.
+- A `CrudService.update` call with `bypassAclRls` runs no pipeline, so it does not hash a password. Issue #6 tracks this.
+
+`enginehq init --auth` scaffolds a user model with this setup.
 
 ### Minimal Config Example
 
