@@ -49,4 +49,4 @@ RLS can be bypassed based on:
     - For **Create**: Apply the `writeGuard` logic (enforce or validate).
     - For **Update**: Add the `update` scope filter to find the row, then apply the `writeGuard` logic.
     - For **Delete**: Apply the scope filter.
-4. **Final Decision:** Access is granted only if both layers allow the operation. The only way to skip ACL is the `bypassAclRls` call option, which skips ACL and RLS together. No bypass is logged (issue #9).
+4. **Final Decision:** Access is granted only if both layers allow the operation. The only way to skip ACL is the `bypassAclRls` call option, which skips ACL and RLS together. Each such call writes the info log line `[crud] audited bypass` with the model, the action, the origin, and the actor subjects and roles. The line does not contain the actor claims.
