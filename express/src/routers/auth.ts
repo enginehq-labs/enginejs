@@ -5,6 +5,7 @@ import { CrudService } from '@enginehq/core';
 import type { Actor } from '@enginehq/core';
 import {
   hashPassword,
+  hashPasswordOp,
   verifyPasswordHash,
   signActorAccessTokenHS256,
   InMemoryAuthSessionStore,
@@ -148,6 +149,13 @@ export function createBuiltinAuthRouter(opts: {
   const { store: sessionStore } = resolveAndLogSessionStore({ config, services });
   const sessions = new SessionService({ store: sessionStore, config: sessionCfg });
 
+  // User models declare { op: 'custom', name: 'hashPassword' } so that CRUD writes hash
+  // passwords too. The guard keeps an app op of the same name, and register() throws on
+  // a duplicate name.
+  if (!services.has('pipelines.custom.hashPassword')) {
+    services.register('pipelines.custom.hashPassword', 'singleton', () => hashPasswordOp);
+  }
+
   // ── POST /auth/register ──────────────────────────────────────────────────
   router.post('/register', async (req, res) => {
     try {
@@ -158,6 +166,8 @@ export function createBuiltinAuthRouter(opts: {
       }
       delete body[cfg.passwordField];
       body[cfg.passwordHashField] = hashPassword(plain);
+      // The client must not choose its own roles.
+      delete body[cfg.rolesField];
 
       const crud = new CrudService({ services });
       const user = (await crud.create({
@@ -201,14 +211,17 @@ export function createBuiltinAuthRouter(opts: {
         return res.fail({ code: 400, message: 'email and password required' });
       }
 
-      const crud   = new CrudService({ services });
-      const result = await crud.list({
-        modelKey: cfg.userModel,
-        actor: SYSTEM_ACTOR,
-        query: { find: JSON.stringify({ [cfg.emailField]: email }) },
-      });
+      // Exact match on the login field. A list query cannot do this safely: 'find' is
+      // parsed but never applied, so every user came back and the newest row was
+      // checked, and 'filters' interprets commas and '*' in the caller's input.
+      // A direct lookup also skips the response pipeline, so the hash stays readable.
+      const orm       = services.resolve<any>('orm', { scope: 'singleton' });
+      const userModel = orm.models[cfg.userModel];
+      const where: Record<string, unknown> = { [cfg.emailField]: email };
+      if (userModel.rawAttributes?.deleted) where.deleted = false;
+      if (userModel.rawAttributes?.archived) where.archived = false;
 
-      const user       = result.rows[0] as Record<string, unknown> | undefined;
+      const user       = (await userModel.findOne({ where, raw: true })) as Record<string, unknown> | null;
       const storedHash = user?.[cfg.passwordHashField] as string | undefined;
 
       if (!user || !storedHash || !verifyPasswordHash(plain, storedHash)) {

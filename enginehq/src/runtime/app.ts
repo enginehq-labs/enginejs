@@ -3,16 +3,13 @@ import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { Actor } from '@enginehq/core';
 import type { Express } from 'express';
 import type { WorkflowRegistry } from '@enginehq/core';
 import { createEngine } from '@enginehq/core';
 import { createEngineExpressApp } from '@enginehq/express';
-import { getBearerToken, verifyActorAccessTokenHS256 } from '@enginehq/auth';
 import { autoloadPipelines, autoloadRoutes, autoloadWorkflows } from './autoload.js';
 import { loadEngineJsConfig } from './config.js';
-
-const ANON_ACTOR: Actor = { isAuthenticated: false, subjects: {}, roles: [], claims: {} };
+import { createActorResolver } from './actorResolver.js';
 
 async function startEngineJsApp(cwd = process.cwd()): Promise<void> {
   const cfg = await loadEngineJsConfig(cwd);
@@ -62,20 +59,7 @@ async function startEngineJsApp(cwd = process.cwd()): Promise<void> {
     registry: workflows,
   });
 
-  // Auto-wire JWT actorResolver when auth.jwt.accessSecret is configured.
-  // Apps can still override this by supplying a custom resolveActor in cfg.
-  const accessSecret = cfg.engine.auth?.jwt?.accessSecret;
-  const resolveActor = accessSecret
-    ? async (req: import('express').Request): Promise<Actor> => {
-        const token = getBearerToken(req.headers.authorization);
-        if (!token) return ANON_ACTOR;
-        try {
-          return await verifyActorAccessTokenHS256({ token, secret: accessSecret });
-        } catch {
-          return ANON_ACTOR;
-        }
-      }
-    : undefined;
+  const resolveActor = createActorResolver(cfg);
 
   const app = await createEngineExpressApp(engine, {
     ...(resolveActor ? { resolveActor } : {}),

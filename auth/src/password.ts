@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 
+import type { PipelineCtx } from '@enginehq/core';
+
 /**
  * Hashes a plain-text password using PBKDF2-SHA256.
  * Parameters are compatible with the verifyPasswordHash function below.
@@ -28,4 +30,18 @@ export function verifyPasswordHash(plain: string, stored: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Pipeline op that hashes a virtual password field before persist. Declare it in
+ * create.beforePersist and update.beforePersist as { "op": "custom", "name": "hashPassword" }.
+ * Optional args: from (default 'password') and to (default 'password_hash').
+ * The op changes ctx.input in place, because the pipeline engine ignores its return value.
+ */
+export function hashPasswordOp(ctx: PipelineCtx, args?: { from?: string; to?: string }): void {
+  const from = args?.from ?? 'password';
+  const to = args?.to ?? 'password_hash';
+  const plain = ctx.input[from];
+  if (typeof plain === 'string' && plain) ctx.input[to] = hashPassword(plain);
+  delete ctx.input[from];
 }
