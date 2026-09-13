@@ -371,7 +371,7 @@ function buildFilterExpr({
     if (expr.op === 'eq') return { [field]: { [Op.contains]: [expr.value] } };
     if (expr.op === 'ne') return { [Op.not]: { [field]: { [Op.contains]: [expr.value] } } };
     if (expr.op === 'like') {
-      const v = String(expr.value || '').replace(/\\*/g, '%');
+      const v = String(expr.value || '').replace(/\*/g, '%');
       return where(
         fn('array_to_string', col(field), ' '),
         { [Op.iLike]: v.includes('%') ? v : `%${v}%` }
@@ -380,7 +380,7 @@ function buildFilterExpr({
     throw new CrudBadRequestError(`Unsupported filter op for string[] field: ${expr.op}`);
   }
 
-  const vLike = String(expr.value || '').replace(/\\*/g, '%');
+  const vLike = String(expr.value || '').replace(/\*/g, '%');
   const pattern = vLike.includes('%') ? vLike : `%${vLike}%`;
 
   if (expr.op === 'eq') return { [field]: expr.value };

@@ -225,6 +225,23 @@ test('CrudService: a filter on an integer junction field uses the junction subqu
   assert.match(String(where.id?.[Op.in]), /SELECT "itemId" FROM "item__tags__to__tag__id" WHERE "tagId" = '99'/);
 });
 
+test('CrudService: a * in a string filter becomes the ILIKE wildcard', async () => {
+  const { list, Op } = buildFilterHarness({ name: { type: 'string' } });
+
+  const where = await list('name:Al*');
+
+  assert.equal(where.name?.[Op.iLike], 'Al%');
+});
+
+test('CrudService: a * in a string array filter becomes the ILIKE wildcard', async () => {
+  const { list, Op } = buildFilterHarness({ labels: { type: 'string', multi: true } });
+
+  const where = await list('labels:Al*');
+
+  assert.deepEqual(where.WHERE, { FN: 'array_to_string', args: [{ COL: 'labels' }, ' '] });
+  assert.equal(where.cond?.[Op.iLike], 'Al%');
+});
+
 test('CrudService: create wraps operation in transaction if junction fields present', async () => {
   const dsl: DslRoot = {
     tag: { fields: { id: { type: 'int', primary: true } } },
