@@ -816,6 +816,8 @@ export class CrudService {
         }).output;
       }
 
+      // Guard again: a pipeline op may have changed a field that RLS protects.
+      payload = applyWriteGuard({ guard, payload });
       payload = stripVirtualFields(spec, payload);
       let created: any;
       let row: any;
@@ -1135,6 +1137,8 @@ export class CrudService {
         }).output;
       }
 
+      // Guard again: a pipeline op may have changed a field that RLS protects.
+      payload = applyWriteGuard({ guard, payload });
       payload = stripVirtualFields(spec, payload);
       let row: any;
       await (orm.sequelize as any).transaction(async (t: any) => {
