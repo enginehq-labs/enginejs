@@ -5,6 +5,9 @@ Instructions for AI agents that work in the EngineJS repository.
 Claude Code loads this file through the `@AGENTS.md` import in `CLAUDE.md`. The
 communication rules for Claude Code are in `.claude/rules/communication.md`.
 
+Gemini CLI does not read this file by default. Set `context.fileName` to `AGENTS.md`
+in the Gemini CLI settings.
+
 ## What EngineJS is
 
 EngineJS is a schema-as-code TypeScript and Express backend framework. You define
@@ -126,9 +129,6 @@ EngineJS is a code-first monorepo. The code in `core/`, `auth/`, `express/`, and
 Track work in **GitHub issues**. Do not create process directories, track files, spec
 files, or plan files in the repository.
 
-This replaces the previous Conductor workflow. Issue #1 removes the remaining
-`conductor/` directory.
-
 ## Quality gates
 
 - Write the test before the implementation. Confirm the test fails first.
@@ -141,19 +141,6 @@ This replaces the previous Conductor workflow. Issue #1 removes the remaining
 
 Match the style of the code around you. Keep the same comment density, naming, and
 idiom as the file you edit.
-
-Reference documents:
-
-- `conductor/code_styleguides/typescript.md`
-- `conductor/code_styleguides/javascript.md`
-- `conductor/code_styleguides/general.md`
-
-These files describe the Google TypeScript style. The repository does not follow every
-rule in them. For example, route modules and pipeline operations use default exports,
-which that guide forbids. Where the guide and the surrounding code disagree, follow the
-surrounding code.
-
-Issue #1 moves these files out of `conductor/`.
 
 ## Framework documentation
 

@@ -51,10 +51,10 @@ See `RELEASING.md`.
 
 ## Development model
 
-This repo uses [Conductor](https://github.com/gemini-cli-extensions/conductor), a spec-driven development framework. All project context, tracks, and implementation plans are located in the `conductor/` directory.
+Work is tracked in GitHub issues.
 
-- `conductor/product.md` — Product vision and scope
-- `conductor/tech-stack.md` — Canonical technology stack
-- `conductor/workflow.md` — Development and task procedures
-- `conductor/tracks.md` — Project tracks and progress tracking
+- `AGENTS.md`: project facts and rules for every AI coding tool
+- `CLAUDE.md`: Claude Code instructions, which import `AGENTS.md`
+- `docs/framework/`: framework documentation
+- `docs/product.md`: product vision
 
