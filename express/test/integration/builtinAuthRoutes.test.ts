@@ -173,6 +173,9 @@ test('docker postgres: builtin auth register -> login -> refresh -> logout flow'
           password_hash: { type: 'string', length: 255 },
           roles: { type: 'jsonb' },
         },
+        // Hide the hash from list responses, as the --auth scaffold does. Login must
+        // still read it, so login has to skip the response pipeline.
+        pipelines: { list: { response: [{ op: 'remove', fields: ['password_hash'] }] } },
         access: { read: ['system'], create: ['system'], update: ['system'], delete: ['system'] },
       },
     }),
@@ -284,6 +287,34 @@ test('docker postgres: builtin auth register -> login -> refresh -> logout flow'
 
   let accessToken = '';
   let refreshToken = '';
+
+  await t.test('register ignores roles sent by the client', async () => {
+    const res = await request(`${url}/auth/register`, {
+      method: 'POST',
+      body: { email: 'mallory@example.com', password: 'mallory-pass', roles: ['admin'] },
+    });
+    assert.equal(res.status, 201);
+
+    const me = await request(`${url}/auth/me`, {
+      headers: { authorization: `Bearer ${res.body.data.accessToken}` },
+    });
+    assert.equal(me.body.data.isAuthenticated, true);
+    assert.equal(me.body.data.roles.includes('admin'), false, 'the client must not choose its roles');
+  });
+
+  await t.test('login does not accept another user\'s password for an unknown email', async () => {
+    // mallory is now the newest user. A lookup that ignores the email would check the
+    // password against the newest row and sign the caller in as mallory.
+    const res = await request(`${url}/auth/login`, {
+      method: 'POST',
+      body: { email: 'nobody@example.com', password: 'mallory-pass' },
+    });
+    assert.equal(res.status, 401);
+  });
+
+  await t.test('the router registers the hashPassword pipeline op', async () => {
+    assert.equal(engine.services.has('pipelines.custom.hashPassword'), true);
+  });
 
   await t.test('login with correct credentials returns a token pair', async () => {
     const res = await request(`${url}/auth/login`, { method: 'POST', body: creds });
