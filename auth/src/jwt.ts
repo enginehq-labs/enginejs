@@ -24,6 +24,17 @@ function hmacSha256(secret: string, input: string): Buffer {
   return crypto.createHmac('sha256', secret).update(input).digest();
 }
 
+export const MIN_JWT_SECRET_LENGTH = 32;
+
+/** Throws when the HS256 secret is missing or too short to resist a brute-force search. */
+export function assertJwtSecret(secret: unknown): asserts secret is string {
+  if (typeof secret !== 'string' || secret.length < MIN_JWT_SECRET_LENGTH) {
+    throw new Error(
+      `auth.jwt.accessSecret must be at least ${MIN_JWT_SECRET_LENGTH} characters. Set JWT_SECRET to a random value.`,
+    );
+  }
+}
+
 export type JwtHeader = { alg: 'HS256'; typ: 'JWT' };
 
 export type JwtBody = Record<string, unknown> & {

@@ -107,12 +107,12 @@ export function initEngineJsApp(opts: InitAppOptions): void {
   const authEnabled = opts.auth === true;
   const authSection = authEnabled
     ? `      auth: {
-        jwt: { accessSecret: process.env.JWT_SECRET || 'dev', accessTtl: '15m' },
+        jwt: { accessSecret: process.env.JWT_SECRET ?? '', accessTtl: '15m' },
         local: {
           userModel: 'user',
         },
       },`
-    : `      auth: { jwt: { accessSecret: process.env.JWT_SECRET || 'dev', accessTtl: '1h' } },`;
+    : `      auth: { jwt: { accessSecret: process.env.JWT_SECRET ?? '', accessTtl: '1h' } },`;
 
   writeFileIfMissing(
     path.join(targetDir, 'enginejs.config.ts'),

@@ -68,7 +68,7 @@ function scaffoldApp(root: string, port: number): void {
     app: { name: 'start-app-it', env: 'test' },
     db: { url: 'postgres://postgres:postgres@127.0.0.1:1/none', dialect: 'postgres' },
     dsl: { fragments: { modelsDir: 'dsl/models', metaDir: 'dsl/meta' } },
-    auth: { jwt: { accessSecret: 'x', accessTtl: '1h' } },
+    auth: { jwt: { accessSecret: '${'x'.repeat(32)}', accessTtl: '1h' } },
     acl: {},
     rls: { subjects: {}, policies: {} },
     workflows: { enabled: false },

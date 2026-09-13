@@ -1,4 +1,5 @@
 import express from 'express';
+import { assertJwtSecret } from '@enginehq/auth';
 import type { Actor, DslRoot, EngineConfig, OrmInitResult, ServiceRegistry } from '@enginehq/core';
 import type { EngineRuntime } from '@enginehq/core';
 import type { Express } from 'express';
@@ -54,6 +55,8 @@ export async function createExpressApp(opts: ExpressAppOptions) {
   
   // Mount built-in auth routes when auth.local is configured
   if (config.auth?.local) {
+    // The auth routes sign tokens, so a weak secret lets anyone forge an actor.
+    assertJwtSecret(config.auth.jwt?.accessSecret);
     const authPath = `${basePath}/auth`;
     app.use(
       authPath,

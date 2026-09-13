@@ -279,3 +279,143 @@ test('CrudService: read with bypassAclRls honours runPipelines false', async () 
 
   assert.equal(ran.length, 0, 'callers must still be able to opt out');
 });
+
+/**
+ * The RLS write guard must hold for the payload that is persisted. A `set` op in
+ * beforePersist runs after the first guard call, so it could replace an enforced field.
+ */
+function buildWriteGuardHarness(writeMode: 'enforce' | 'validate') {
+  const dsl: DslRoot = {
+    task: {
+      fields: {
+        id: { type: 'int', primary: true },
+        customer_id: { type: 'int' },
+        name: { type: 'string' },
+      },
+      access: { read: ['admin'], create: ['admin'], update: ['admin'], delete: ['admin'] },
+    } as any,
+  };
+
+  const persisted: Array<Record<string, unknown>> = [];
+  const existing = {
+    get: () => ({ id: 1, customer_id: 7, name: 'old' }),
+    update: async (payload: any) => {
+      persisted.push(payload);
+    },
+  };
+
+  const orm: OrmInitResult = {
+    sequelize: {
+      transaction: async (cb: any) => cb({}),
+      Sequelize: { Op: { and: Symbol('and'), or: Symbol('or') }, literal: () => '' },
+    } as any,
+    models: {
+      task: {
+        primaryKeyAttributes: ['id'],
+        rawAttributes: { id: {}, customer_id: {}, name: {} },
+        associations: {},
+        create: async (payload: any) => {
+          persisted.push(payload);
+          return { get: () => ({ id: 1, ...payload }) };
+        },
+        findOne: async () => existing,
+      },
+    } as any,
+    junctionModels: {},
+    dsl,
+  };
+
+  const rule = { subject: 'customer', field: 'customer_id', writeMode };
+  const config = {
+    rls: { subjects: {}, policies: { task: { create: rule, update: rule } } },
+  } as unknown as EngineConfig;
+
+  const setCustomer = [{ op: 'set', field: 'customer_id', value: 999 }];
+  const services = new DefaultServiceRegistry();
+  services.register('dsl', 'singleton', () => dsl);
+  services.register('orm', 'singleton', () => orm);
+  services.register('config', 'singleton', () => config);
+  services.register('pipelines', 'singleton', () => ({
+    get: () => ({ create: { beforePersist: setCustomer }, update: { beforePersist: setCustomer } }),
+  }));
+
+  const actor = {
+    isAuthenticated: true,
+    subjects: { customer: { type: 'customer', model: 'customer', id: 7 } },
+    roles: ['admin'],
+    claims: {},
+  };
+
+  return { service: new CrudService({ services }), persisted, actor };
+}
+
+test('CrudService: create in enforce mode keeps the enforced field after the pipelines', async () => {
+  const { service, persisted, actor } = buildWriteGuardHarness('enforce');
+
+  await service.create({ actor, modelKey: 'task', values: { customer_id: 7, name: 'a' } });
+
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0]!.customer_id, 7, 'a pipeline op must not replace an enforced field');
+});
+
+test('CrudService: create in validate mode rejects a pipeline value that breaks the guard', async () => {
+  const { service, persisted, actor } = buildWriteGuardHarness('validate');
+
+  await assert.rejects(
+    service.create({ actor, modelKey: 'task', values: { customer_id: 7, name: 'a' } }),
+    (e: any) => e?.name === 'CrudForbiddenError' || /RLS write guard/.test(String(e?.message)),
+  );
+  assert.equal(persisted.length, 0, 'nothing may be written');
+});
+
+test('CrudService: update in enforce mode keeps the enforced field after the pipelines', async () => {
+  const { service, persisted, actor } = buildWriteGuardHarness('enforce');
+
+  await service.update({ actor, modelKey: 'task', id: 1, values: { name: 'b' } });
+
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0]!.customer_id, 7, 'a pipeline op must not replace an enforced field');
+});
+
+function recordInfoLogs(services: DefaultServiceRegistry) {
+  const lines: Array<{ msg: string; meta: any }> = [];
+  services.register('logger', 'singleton', () => ({
+    info: (msg: string, meta?: any) => lines.push({ msg, meta }),
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+  }));
+  return lines;
+}
+
+test('CrudService: a bypassAclRls call writes one audit log line', async () => {
+  const { services } = buildReadHarness();
+  const lines = recordInfoLogs(services);
+  const service = new CrudService({ services });
+  const actor = {
+    isAuthenticated: true,
+    subjects: { user: { type: 'user', model: 'user', id: 5 } },
+    roles: ['system'],
+    claims: { email: 'person@example.com' },
+  };
+
+  await service.read({ actor, modelKey: 'link', id: 1, origin: 'test-origin', options: { bypassAclRls: true } });
+
+  const audits = lines.filter((l) => l.msg === '[crud] audited bypass');
+  assert.equal(audits.length, 1);
+  // Claims can hold personal data, so the log line must not contain them.
+  assert.deepEqual(audits[0]!.meta, { model: 'link', action: 'read', origin: 'test-origin', subjects: ['user:5'], roles: ['system'] });
+});
+
+test('CrudService: a call with no bypass writes no audit log line', async () => {
+  const { services } = buildReadHarness();
+  const lines = recordInfoLogs(services);
+  const service = new CrudService({ services });
+
+  // The outcome of the read does not matter here. Only the log matters.
+  await service
+    .read({ actor: { isAuthenticated: false, subjects: {}, roles: [], claims: {} }, modelKey: 'link', id: 1 })
+    .catch(() => {});
+
+  assert.equal(lines.filter((l) => l.msg === '[crud] audited bypass').length, 0);
+});

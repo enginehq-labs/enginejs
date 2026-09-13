@@ -10,7 +10,7 @@ import { createEngine } from '@enginehq/core';
 import { getBearerToken, verifyActorAccessTokenHS256 } from '@enginehq/auth';
 import { createEngineExpressApp } from '../../src/http/createEngineExpressApp.js';
 
-const ACCESS_SECRET = 'test-access-secret';
+const ACCESS_SECRET = 'test-access-secret-'.padEnd(32, 'x');
 
 function dockerAvailable(): boolean {
   try {

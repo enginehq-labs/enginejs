@@ -27,13 +27,14 @@ Actors in EngineJS can hold multiple "subjects". `actor.subjects` is a map keyed
 ### RLS Scoping (Read/List)
 The `RlsEngine` generates abstract "where" clauses that are transformed into Sequelize predicates.
 - **Field rule `{ subject, field }`:** Matches the subject ID of the actor to a field (e.g., `customer_id = 42`).
-- **`via` rule (Join Paths):** Scopes access through a chain of relationships. The engine generates a `WHERE <primary key> IN (SELECT ...)` subquery that follows the path. It checks the `deleted` and `archived` flags on each model that has those columns. If the chain does not start at the root model, or a model in the chain is missing, no filter is applied and the rows are not scoped (issue #9).
+- **`via` rule (Join Paths):** Scopes access through a chain of relationships. The engine generates a `WHERE <primary key> IN (SELECT ...)` subquery that follows the path. It checks the `deleted` and `archived` flags on each model that has those columns. `engine.init` throws when a chain is empty, does not start at the policy model, has a step that does not start where the previous step ends, or uses an unknown model. If a chain still cannot convert at request time, the filter matches no row.
 - **`anyOf` / `allOf`:** Logical combinators for building complex policies. `anyOf` ignores branches where the required subject is missing from the actor.
 
 ### RLS Write Guards (Create/Update)
 For create and update, RLS operates in one of two modes. The default is `validate`. A delete uses the read scope filter, not a write guard.
-- **`enforce`:** The system overwrites the protected fields with the actor's subject IDs. A value from the client is replaced with no error. Only `{ subject, field }` rules add fields, so a `via` rule guards no field. The guard runs before the pipeline phases, so a pipeline op can change the field again (issue #9).
-- **`validate`:** The system checks each protected field that the payload contains, with strict equality. A missing field passes and is not filled in. A mismatch denies the request.
+- **`enforce`:** The system overwrites the protected fields with the actor's subject IDs. A value from the client is replaced with no error. Only `{ subject, field }` rules add fields. The guard runs before the pipeline phases and again after `beforePersist`, so a pipeline op cannot change a protected field.
+- **`validate`:** The system checks each protected field that the payload contains, with strict equality, before and after the pipeline phases. A missing field passes and is not filled in. A mismatch denies the request.
+- **`via` rules:** A `via` rule protects no field. On create and update, the system selects the written row with the `via` subquery inside the write transaction. If the row is out of scope, the write rolls back and the request is denied.
 
 ### Bypassing RLS
 RLS can be bypassed based on:
@@ -48,4 +49,4 @@ RLS can be bypassed based on:
     - For **Create**: Apply the `writeGuard` logic (enforce or validate).
     - For **Update**: Add the `update` scope filter to find the row, then apply the `writeGuard` logic.
     - For **Delete**: Apply the scope filter.
-4. **Final Decision:** Access is granted only if both layers allow the operation. The only way to skip ACL is the `bypassAclRls` call option, which skips ACL and RLS together. No bypass is logged (issue #9).
+4. **Final Decision:** Access is granted only if both layers allow the operation. The only way to skip ACL is the `bypassAclRls` call option, which skips ACL and RLS together. Each such call writes the info log line `[crud] audited bypass` with the model, the action, the origin, and the actor subjects and roles. The line does not contain the actor claims.

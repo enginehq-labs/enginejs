@@ -5,6 +5,7 @@ import type { EngineConfig } from '../config/types.js';
 import { AclEngine } from '../acl/engine.js';
 import { RlsEngine } from '../rls/engine.js';
 import { rlsWhereToSequelize } from '../rls/toSequelizeWhere.js';
+import type { RlsWhere } from '../rls/where.js';
 import type { OrmInitResult } from '../orm/types.js';
 import type { DslModelSpec, DslRoot } from '../dsl/types.js';
 import { isDslModelSpec } from '../dsl/types.js';
@@ -18,7 +19,7 @@ import type { FilterExpr, ListQueryAst, SortSpec } from '../query/types.js';
 import { PipelineValidationError } from '../pipelines/errors.js';
 
 import { CrudBadRequestError, CrudForbiddenError, CrudNotFoundError } from './errors.js';
-import type { CrudCallOptions, CrudCtx, CrudListQuery, CrudListResult } from './types.js';
+import type { CrudAction, CrudCallOptions, CrudCtx, CrudListQuery, CrudListResult } from './types.js';
 import { stripVirtualFields, pruneUnknownPayload, normalizePayloadMultiFields, computeChangedFields } from './utils.js';
 
 function getSequelizeLib(orm: OrmInitResult) {
@@ -278,6 +279,36 @@ function applyWriteGuard(args: { guard: any; payload: Record<string, unknown> })
   return payload;
 }
 
+function whereHasVia(where: RlsWhere | null | undefined): boolean {
+  if (!where) return false;
+  if ('via' in where) return true;
+  if ('and' in where) return where.and.some(whereHasVia);
+  if ('or' in where) return where.or.some(whereHasVia);
+  return false;
+}
+
+/**
+ * A via rule guards no field, so the written row is selected with the via subquery.
+ * The count runs in the write transaction, and the throw rolls the write back.
+ */
+async function assertWriteInViaScope(args: {
+  orm: OrmInitResult;
+  model: ModelStatic<Model>;
+  modelKey: string;
+  id: unknown;
+  where: RlsWhere | null;
+  transaction: any;
+}): Promise<void> {
+  if (!whereHasVia(args.where)) return;
+  const pk = getPrimaryKeyField(args.model);
+  const { Op } = getSequelizeLib(args.orm);
+  const count = await (args.model as any).count({
+    where: { [Op.and]: [{ [pk]: args.id }, rlsWhereToSequelize(args.orm, args.modelKey, args.where)] },
+    transaction: args.transaction,
+  });
+  if (!count) throw new CrudForbiddenError('RLS write guard');
+}
+
 function modelSpec(dsl: DslRoot, modelKey: string): DslModelSpec {
   const spec = dsl[modelKey];
   if (!isDslModelSpec(spec)) throw new CrudNotFoundError(`Unknown model: ${modelKey}`);
@@ -502,6 +533,19 @@ export class CrudService {
     return this.deps.services.resolve('pipelines', { scope: 'singleton' }) as PipelineRegistry;
   }
 
+  /** Writes one audit line for each bypassAclRls call. Claims can hold personal data, so they are left out. */
+  private logBypass(action: CrudAction, args: CrudCtx & { modelKey: string }): void {
+    if (!this.deps.services.has('logger')) return;
+    const logger = this.deps.services.resolve<any>('logger', { scope: 'singleton' });
+    logger.info('[crud] audited bypass', {
+      model: args.modelKey,
+      action,
+      origin: args.origin,
+      subjects: Object.values(args.actor?.subjects || {}).map((s) => `${s.type}:${s.id}`),
+      roles: args.actor?.roles || [],
+    });
+  }
+
   private pipelineServices() {
     const svcs = this.deps.services;
     return {
@@ -582,6 +626,7 @@ export class CrudService {
     const { Op } = getSequelizeLib(orm);
 
     const bypass = args.options?.bypassAclRls === true;
+    if (bypass) this.logBypass('list', args);
     if (!bypass) {
       const acl = new AclEngine();
       const aclRes = acl.can({ actor: args.actor, modelKey: args.modelKey, modelSpec: spec, action: 'read' });
@@ -764,6 +809,7 @@ export class CrudService {
     const model = getModel(orm, args.modelKey);
 
     const bypass = args.options?.bypassAclRls === true;
+    if (bypass) this.logBypass('create', args);
     if (!bypass) {
       const acl = new AclEngine();
       const aclRes = acl.can({ actor: args.actor, modelKey: args.modelKey, modelSpec: spec, action: 'create' });
@@ -772,6 +818,7 @@ export class CrudService {
       const rls = new RlsEngine(config.rls);
       const guard = rls.writeGuard({ actor: args.actor, modelKey: args.modelKey, action: 'create' });
       if (!guard.allow) throw new CrudForbiddenError((guard as any).reason || 'RLS denied');
+      const writeScope = rls.scope({ actor: args.actor, modelKey: args.modelKey, action: 'create' });
 
       const runPipelines = args.options?.runPipelines !== false;
       const registry = this.getPipelineRegistry();
@@ -816,6 +863,8 @@ export class CrudService {
         }).output;
       }
 
+      // Guard again: a pipeline op may have changed a field that RLS protects.
+      payload = applyWriteGuard({ guard, payload });
       payload = stripVirtualFields(spec, payload);
       let created: any;
       let row: any;
@@ -829,6 +878,15 @@ export class CrudService {
           spec,
           instance: created,
           joinPayloads,
+          transaction: t,
+        });
+
+        await assertWriteInViaScope({
+          orm,
+          model,
+          modelKey: args.modelKey,
+          id: row?.[getPrimaryKeyField(model)],
+          where: writeScope.where,
           transaction: t,
         });
       });
@@ -954,6 +1012,7 @@ export class CrudService {
     const pk = getPrimaryKeyField(model);
 
     const bypass = args.options?.bypassAclRls === true;
+    if (bypass) this.logBypass('read', args);
     if (!bypass) {
       const acl = new AclEngine();
       const aclRes = acl.can({ actor: args.actor, modelKey: args.modelKey, modelSpec: spec, action: 'read' });
@@ -1069,6 +1128,7 @@ export class CrudService {
     const pk = getPrimaryKeyField(model);
 
     const bypass = args.options?.bypassAclRls === true;
+    if (bypass) this.logBypass('update', args);
     if (!bypass) {
       const acl = new AclEngine();
       const aclRes = acl.can({ actor: args.actor, modelKey: args.modelKey, modelSpec: spec, action: 'update' });
@@ -1135,6 +1195,8 @@ export class CrudService {
         }).output;
       }
 
+      // Guard again: a pipeline op may have changed a field that RLS protects.
+      payload = applyWriteGuard({ guard, payload });
       payload = stripVirtualFields(spec, payload);
       let row: any;
       await (orm.sequelize as any).transaction(async (t: any) => {
@@ -1149,6 +1211,8 @@ export class CrudService {
           joinPayloads,
           transaction: t,
         });
+
+        await assertWriteInViaScope({ orm, model, modelKey: args.modelKey, id: args.id, where: scope.where, transaction: t });
       });
 
       if (runPipelines) {
@@ -1224,6 +1288,7 @@ export class CrudService {
     const pk = getPrimaryKeyField(model);
 
     const bypass = args.options?.bypassAclRls === true;
+    if (bypass) this.logBypass('delete', args);
     if (!bypass) {
       const acl = new AclEngine();
       const aclRes = acl.can({ actor: args.actor, modelKey: args.modelKey, modelSpec: spec, action: 'delete' });

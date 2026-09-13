@@ -9,7 +9,7 @@ export default {
     dsl: {
       fragments: { modelsDir: 'dsl/models', metaDir: 'dsl/meta' },
     },
-    auth: { jwt: { accessSecret: process.env.JWT_SECRET || 'dev', accessTtl: '1h' } },
+    auth: { jwt: { accessSecret: process.env.JWT_SECRET ?? '', accessTtl: '1h' } },
     acl: {},
     rls: { subjects: {}, policies: {} },
     workflows: { enabled: true },
