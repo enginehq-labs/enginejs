@@ -4,7 +4,7 @@
 EngineJS provides two complementary systems for managing database schema evolution: **Safe Sync** for automated, non-destructive DSL-driven updates, and a **Migration Runner** for explicit, imperative schema changes.
 
 ## Safe Sync
-Safe Sync is an automated tool that synchronizes the database schema with the compiled DSL. It is designed to be "safe" by only performing widening (additive) changes and blocking narrowing (destructive) operations that it finds by a comparison with the last DSL snapshot. With no snapshot, `allowNoSnapshot` defaults to true, so the first sync runs with no check (issue #11).
+Safe Sync is an automated tool that synchronizes the database schema with the compiled DSL. It is designed to be "safe" by only performing widening (additive) schema changes and blocking narrowing (destructive) operations that it finds by a comparison with the last DSL snapshot. With no snapshot, `allowNoSnapshot` defaults to true, so the first sync runs with no check (issue #11).
 
 ### Widening Rules
 Safe Sync only permits changes that do not risk data loss:
@@ -18,6 +18,8 @@ Safe Sync uses a **DSL Snapshot** mechanism to detect and block narrowing change
 - **Blocked**: Removing a model or field.
 - **Blocked**: Reducing column length or narrowing types (e.g., `TEXT` -> `VARCHAR`).
 - **Not detected**: Removing an index. The snapshot comparison checks models and field types only (issue #11).
+
+Safe Sync also recomputes the `auto_name` column on existing rows when the `auto_name` definition of a model changes.
 
 To perform destructive changes, developers must use the imperative Migration Runner. No CLI command runs migrations: use the `migrationRunner` service or the admin routes.
 

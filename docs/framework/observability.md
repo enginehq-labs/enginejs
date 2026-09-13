@@ -36,7 +36,7 @@ app.get('/custom', async (req, res) => {
 
 ### Usage in Workflows
 
-Logs generated within a workflow automatically include the `traceId` of the event that triggered the workflow.
+Logs generated within a workflow automatically include the `traceId` of the event that triggered the workflow. If the event has no `traceId`, the runner uses `wf-<eventId>`.
 
 ```json
 {

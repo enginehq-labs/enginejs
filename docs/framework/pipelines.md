@@ -4,12 +4,12 @@
 EngineJS use a pluggable Pipeline architecture to transform, validate, and process data during the request lifecycle. Pipelines are composed of discrete "Ops" (operations) that run within specific "Phases" for each CRUD action.
 
 ## Pipeline Phases
-For `create` and `update` without a bypass, the phases run in the order below. `read` and `list` run only `response`. `delete` runs no phase, and the bypass paths skip some phases.
+For `create` and `update` without a bypass, the phases run in the order below. `read` and `list` run only `response`. `delete` runs no phase. With `bypassAclRls`, `create` runs every phase except `response`, `update` and `list` run no phase, and `read` runs `response`.
 
 1. **`beforeValidate`**: Initial data sanitization and transformation (e.g., trimming strings, setting defaults).
-2. **`validate`**: Data integrity checks. The phase checks all fields, then throws one `PipelineValidationError` that holds every field error.
+2. **`validate`**: Data integrity checks. The field validators check all fields, then throw one `PipelineValidationError` with one error for each field. The `workflowSpec` validator and a missing validator service throw at once.
 3. **`beforePersist`**: Final adjustments before the data is sent to the ORM (e.g., hashing passwords, injecting derived values).
-4. **`afterPersist`**: Post-write logic (e.g., clearing caches). The outbox event is not written here: the CRUD service emits it after the `response` phase. The database transaction is committed before this phase if managed by the CRUD service.
+4. **`afterPersist`**: Post-write logic (e.g., clearing caches). The outbox event is not written here. When workflows are enabled, the CRUD service emits it after the last phase that runs. The database transaction is committed before this phase if managed by the CRUD service.
 5. **`response`**: Transformation of the final result before it is sent to the client (e.g., redacting sensitive fields).
 
 ## Built-in Ops

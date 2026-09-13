@@ -38,7 +38,7 @@ Every request to an EngineJS app passes through this middleware stack, in this o
 The framework automatically mounts a generic CRUD router. By default it mounts at `/api/crud`. Set `engine.http.crudPath` to change it. `engine.http.basePath` is added in front.
 
 The router maps HTTP verbs to model operations:
-- **`GET /api/crud/:model`**: List records. Supports `filters`, `sort`, `page` and `limit`. The `find` search parameter does nothing today (issue #12).
+- **`GET /api/crud/:model`**: List records. Supports `filters`, `sort`, `page`, `limit`, `includeDepth`, `includeDeleted` and `includeArchived`. The `find` search parameter does nothing today (issue #12).
 - **`GET /api/crud/:model/:id`**: Read a single record.
 - **`POST /api/crud/:model`**: Create a new record.
 - **`PATCH /api/crud/:model/:id`**: Update an existing record.
@@ -99,17 +99,17 @@ The `CrudService` in `@enginehq/core` is the engine-room of data operations. It 
 
 ### Operation Lifecycle
 For `create` and `update`, the service runs the steps below. `delete` runs step 1, marks the row deleted, and emits the workflow event. It runs no pipeline.
-1. **Security Check**: Executes ACL and RLS checks against the current actor. `bypassAclRls` skips this step.
+1. **Security Check**: Executes ACL and RLS checks against the current actor. `bypassAclRls` skips this step. On `update` it also skips every pipeline step.
 2. **Pre-Validation Pipeline**: Runs the `beforeValidate` phase (sanitization, defaults).
 3. **Validation Pipeline**: Runs the `validate` phase (business rules, required fields).
 4. **Pre-Persist Pipeline**: Runs the `beforePersist` phase.
 5. **Persistence**: Maps DSL fields to Sequelize attributes and executes the database operation.
 6. **Junction Updates**: Manages many-to-many associations for `multi: true` foreign keys.
 7. **Post-Persist Pipeline**: Runs the `afterPersist` phase.
-8. **Response Pipeline**: Runs the `response` phase (redaction). The bypass path of `create` and `update` does not run it.
-9. **Pruning**: Strips internal fields and ensures the returned object matches the DSL definition.
-10. **Workflow Emission**: Emits an event to the `workflow_events_outbox` if workflows are enabled. The event comes after the response phase. For `update`, it comes before pruning.
+8. **Response Pipeline**: Runs the `response` phase (redaction). The bypass path of `create` skips this phase, and the bypass path of `update` skips steps 2, 3, 4, 7 and 8.
+9. **Pruning**: Drops keys that are not DSL fields, include aliases or `*_auto_name` keys. System fields such as `deleted` stay.
+10. **Workflow Emission**: Emits an event to the `workflow_events_outbox` if workflows are enabled. Where a response phase runs, the event comes after it. The event comes before pruning for `update`, and for the bypass path of `create`.
 
 ### Internal vs External Calls
 - **External (HTTP)**: Triggered by the Express router. It always enforces ACL and RLS, and runs the pipelines of the action.
-- **Internal (Workflows/Plugins)**: Resolve the service with `engine.services.resolve('crudService', { scope: 'singleton' })`. Call options: `bypassAclRls` skips ACL and RLS, `runPipelines: false` skips all pipelines, and `runResponsePipeline: false` skips the response phase. No option skips one other phase.
+- **Internal (Workflows/Plugins)**: Resolve the service with `engine.services.resolve('crudService', { scope: 'singleton' })`. Call options: `bypassAclRls` skips ACL and RLS (and every pipeline on `update`), `runPipelines: false` skips all pipelines, and `runResponsePipeline: false` skips the response phase. No option skips one other phase.

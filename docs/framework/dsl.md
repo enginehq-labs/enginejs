@@ -12,7 +12,7 @@ The `compileDslFromFs` function in `core/src/dsl/registry.ts` discovers, loads a
 
 Fragments load from two directories, set by `config.dsl.fragments.metaDir` and `config.dsl.fragments.modelsDir`. The `enginehq` scaffold uses:
 
-1. **`dsl/meta/*.json`**: System-level models (e.g., `dsl`, `workflow`, `workflow_events_outbox`). Only `dsl` is required.
+1. **`dsl/meta/*.json`**: System-level models (e.g., `dsl`, `workflow`, `workflow_events_outbox`). Only `dsl` is always required. `workflow_events_outbox` is required when workflows are enabled, and the workflow model when `workflows.registry` is `db`.
 2. **`dsl/models/*.json`**: Application-specific business models.
 
 ### Compilation Rules
@@ -28,7 +28,7 @@ Before validation, every model is automatically augmented with mandatory system 
 - `created_at`, `updated_at`: Timestamps.
 - `deleted`, `deleted_at`: Soft-delete tracking.
 - `archived`, `archived_at`: Archival tracking.
-- `auto_name`: STRING field (512 chars) used for search and FK resolution.
+- `auto_name`: STRING field (512 chars) used for FK labels (`<field>_auto_name`). Search through `find` is not applied today (issue #12).
 - `ui.sort`: Default list sort set to `["-created_at"]` if missing.
 
 ### Validation
@@ -59,7 +59,7 @@ DSL types are mapped to Sequelize `DataTypes`:
 - `json`/`jsonb` -> `JSONB`.
 - `float`/`decimal`/`number` -> `DOUBLE`.
 - `uuid` -> `UUID`.
-- Any other type -> `STRING(255)`.
+- Any other type -> `STRING`, with `max`, `length` or `size` as the length, else 255.
 
 ### Associations
 
@@ -71,7 +71,7 @@ The adapter automatically creates Sequelize associations based on the DSL:
 
 ## Virtual Fields
 
-Fields with `save: false` are excluded from the Sequelize model definition and database schema. They exist only at the API and Pipeline levels. A field with `type: "embed"` is not excluded: it becomes a `STRING(255)` column.
+Fields with `save: false` are excluded from the Sequelize model definition and database schema. They exist only at the API and Pipeline levels. A field with `type: "embed"` is not excluded: it becomes a `STRING` column, like any unknown type.
 
 ## Query Capabilities
 
@@ -79,17 +79,17 @@ EngineJS provides powerful querying capabilities out-of-the-box for listing oper
 
 ### Relationship Expansion (`includeDepth`)
 
-The `includeDepth` query parameter recursively expands every association of the model: `BelongsTo`, and the `belongsToMany` associations of junction fields.
+The `includeDepth` query parameter recursively expands every association of the model, including `BelongsTo` and both sides of junction `belongsToMany` associations.
 
 - By default `includeDepth=0`. The response holds scalar values, plus junction ID arrays and `<field>_auto_name` keys.
-- Setting `includeDepth=1` automatically attaches the joined objects alongside their ID references (e.g. for `company_id` with `source: "company"`, the nested key is the field `as` value, or else `company`).
+- Setting `includeDepth=1` automatically attaches the joined objects alongside their ID references. A junction field holds an array of joined objects instead of IDs, and `<field>_auto_name` keys are not added (e.g. for `company_id` with `source: "company"`, the nested key is the field `as` value, or else `company`).
 - Settings like `includeDepth=2` traverses deeper relations (e.g. `user` -> `company` -> `location`). `list` caps the depth at 10. `read` has no cap (issue #12).
 
 ### Complex Filtering (`filters`)
 
-You can apply structured filters using the `filters` query parameter. Filters use a comma-separated list of `field:<op><value>` tokens, with one colon. The operator is optional and defaults to `eq`. `field:min..max` gives a range.
+You can apply structured filters using the `filters` query parameter. Filters use a comma-separated list of `field:<op><value>` tokens. The field name ends at the first colon. The operator is optional and defaults to `eq`. `field:min..max` gives a range.
 
-- Supported operators: `=`, `>`, `<`, `>=`, `<=` and `!=`. A value with `*` gives a `like` match, for example `name:Al*`.
+- Supported operators: `=`, `>`, `<`, `>=`, `<=` and `!=`. With no operator or `=`, a value with `*` creates an ILIKE filter. The code does not change `*` to `%` today, so the wildcard does not match (issue #12).
 - Example: `status:=active,created_at:>=2025-01-01`.
 - **Logical AND / OR**: Same-field filter constraints are combined with `OR`, while constraints across different fields are combined with `AND`.
   - e.g. `name:=Alice,name:=Bob` resolves to `(name = 'Alice' OR name = 'Bob')`.
