@@ -7,14 +7,14 @@ EngineJS is a specs-driven TypeScript + Express backend framework for building s
 - pipelines (transforms/validators/plugins)
 - workflows + durable outbox + scheduler/replayer/retention
 
-> Status: **Technical Preview (v0.1.2)** — Active development; APIs may change. Not production-ready yet.
+> Status: **Technical Preview (v0.1.2)**: Active development; APIs may change. Not production-ready yet.
 
 ## Packages
 
-- `@enginehq/core` — core runtime (DSL, ORM, ACL/RLS, pipelines, workflows, migrations, core CRUD service)
-- `@enginehq/auth` — JWT HS256 + optional refresh sessions (rotation/revocation)
-- `@enginehq/express` — Express adapter (middleware, envelope, generic HTTP CRUD, admin endpoints)
-- `enginehq` — unscoped umbrella re-export
+- `@enginehq/core`: core runtime (DSL, ORM, ACL/RLS, pipelines, workflows, migrations, core CRUD service)
+- `@enginehq/auth`: JWT HS256 + optional refresh sessions (rotation/revocation)
+- `@enginehq/express`: Express adapter (middleware, envelope, generic HTTP CRUD, admin endpoints)
+- `enginehq`: unscoped umbrella re-export
 
 ## Install
 
@@ -51,10 +51,10 @@ See `RELEASING.md`.
 
 ## Development model
 
-This repo uses [Conductor](https://github.com/gemini-cli-extensions/conductor), a spec-driven development framework. All project context, tracks, and implementation plans are located in the `conductor/` directory.
+Work is tracked in GitHub issues.
 
-- `conductor/product.md` — Product vision and scope
-- `conductor/tech-stack.md` — Canonical technology stack
-- `conductor/workflow.md` — Development and task procedures
-- `conductor/tracks.md` — Project tracks and progress tracking
+- `AGENTS.md`: project facts and rules for every AI coding tool
+- `CLAUDE.md`: Claude Code instructions, which import `AGENTS.md`
+- `docs/framework/`: framework documentation
+- `docs/product.md`: product vision
 

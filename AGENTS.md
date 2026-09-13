@@ -2,8 +2,11 @@
 
 Instructions for AI agents that work in the EngineJS repository.
 
-Claude Code reads `CLAUDE.md` first. That file holds the communication rules.
-This file holds the project facts.
+Claude Code loads this file through the `@AGENTS.md` import in `CLAUDE.md`. The
+communication rules for Claude Code are in `.claude/rules/communication.md`.
+
+Gemini CLI does not read this file by default. Set `context.fileName` to `AGENTS.md`
+in the Gemini CLI settings.
 
 ## What EngineJS is
 
@@ -104,6 +107,20 @@ missing. `.github/workflows/ci.yml` fails the build if any test reports a skip.
 `.github/workflows/ci.yml` runs on each push to `main` and on each pull request. The
 steps are install, build, typecheck, unit tests, integration tests, and the skip guard.
 
+## Project rules
+
+- `@enginehq/core` stays framework-agnostic. It imports no adapter or auth package.
+- All four packages share one version, and they pin each other to that exact version.
+  `npm run release:publish` publishes them in the order core, auth, express, enginehq.
+- Follow Semantic Versioning. During the Technical Preview a breaking change is
+  allowed, but record it in the release notes.
+- Do not add a hardcoded secret. Read secrets from the environment. The `--auth`
+  scaffold still writes a `'dev'` JWT secret fallback, and issue #9 tracks it.
+- Keep ACL and RLS on for CRUD operations. A bypass must be explicit, with the
+  `bypassAclRls` call option. The code does not log bypasses today (issue #9).
+
+The product vision is in `docs/product.md`.
+
 ## Development model
 
 EngineJS is a code-first monorepo. The code in `core/`, `auth/`, `express/`, and
@@ -111,9 +128,6 @@ EngineJS is a code-first monorepo. The code in `core/`, `auth/`, `express/`, and
 
 Track work in **GitHub issues**. Do not create process directories, track files, spec
 files, or plan files in the repository.
-
-This replaces the previous Conductor workflow. Issue #1 removes the remaining
-`conductor/` directory.
 
 ## Quality gates
 
@@ -128,22 +142,9 @@ This replaces the previous Conductor workflow. Issue #1 removes the remaining
 Match the style of the code around you. Keep the same comment density, naming, and
 idiom as the file you edit.
 
-Reference documents:
-
-- `conductor/code_styleguides/typescript.md`
-- `conductor/code_styleguides/javascript.md`
-- `conductor/code_styleguides/general.md`
-
-These files describe the Google TypeScript style. The repository does not follow every
-rule in them. For example, route modules and pipeline operations use default exports,
-which that guide forbids. Where the guide and the surrounding code disagree, follow the
-surrounding code.
-
-Issue #1 moves these files out of `conductor/`.
-
 ## Framework documentation
 
-The prose documentation for the framework lives in `conductor/framework/`:
+The prose documentation for the framework lives in `docs/framework/`:
 
 | File | Subject |
 |---|---|
@@ -156,9 +157,8 @@ The prose documentation for the framework lives in `conductor/framework/`:
 | `workflows.md` | the outbox, the runner, the scheduler |
 | `security.md` | ACL and RLS |
 | `observability.md` | logging and request tracing |
-| `maintenance.md` | outbox retention and cleanup |
+| `maintenance.md` | safe schema sync and migrations |
 
-Issue #1 moves these files to `docs/`.
 
 ## Git
 

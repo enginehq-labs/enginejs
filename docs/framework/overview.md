@@ -1,4 +1,4 @@
-# EngineJS Framework — Technical Overview
+# EngineJS Framework: Technical Overview
 
 ## Introduction
 EngineJS is a Schema-as-Code backend framework for building highly reliable and secure systems. This directory contains the technical specifications for each of its major modules.
@@ -21,9 +21,9 @@ The framework is composed of several core engines and support systems that work 
 ## Module Boundaries
 EngineJS is designed with clear architectural boundaries to ensure stability and reusability:
 
-1. **`@enginehq/core`**: The framework-agnostic runtime. Contains all logic engines (DSL, ACL, RLS, Pipelines, Workflows) and the non-HTTP CRUD service. It depends only on Sequelize and utility libraries.
+1. **`@enginehq/core`**: The framework-agnostic runtime. Contains all logic engines (DSL, ACL, RLS, Pipelines, Workflows) and the non-HTTP CRUD service. Its runtime dependencies are Sequelize, the `pg` PostgreSQL driver, `pino`, `pino-pretty`, Ajv and `ajv-formats`. It imports no adapter or auth package.
 2. **`@enginehq/express`**: The HTTP adapter layer. Connects Express middleware and routers to the `core` services.
-3. **`@enginehq/auth`**: The identity management module. Handles JWT signing/verification and stateful session logic. It is used by the Express adapter to resolve actors.
+3. **`@enginehq/auth`**: The identity management module. Handles JWT signing/verification and stateful session logic. The `enginehq` runtime uses it to resolve the actor from a Bearer token. The Express adapter uses it only in the built-in auth routes, for password hashing, token signing and sessions.
 4. **`enginehq`**: The top-level package that re-exports the entire framework for ease of use.
 
 ## System Lifecycle Summary
@@ -31,7 +31,7 @@ The framework follows a 3-stage lifecycle:
 
 1. **Bootstrap (`createEngine`)**: Services are registered, and the container is initialized.
 2. **Initialization (`engine.init`)**: The DSL is compiled, validated, and used to generate the ORM schema. Plugins are hooked into the ready state.
-3. **Execution**: The system handles requests (HTTP or internal). Every write operation follows a strict flow: **Security -> Pipeline -> Persistence -> Outbox -> Pipeline -> Response**.
+3. **Execution**: The system handles requests (HTTP or internal). A create or an update follows this order: **Security -> pre-persist pipelines -> Persistence -> `afterPersist` and `response` pipelines -> Outbox event -> Response**. With `bypassAclRls`, an update skips the security check and every pipeline. A delete runs the security check, the soft delete and the outbox event. It runs no pipeline. See [Adapter & CRUD Service](adapter.md).
 
 ## Module Index
 - [DSL Compilation & ORM Init](dsl.md)
