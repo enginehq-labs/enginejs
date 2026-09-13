@@ -143,7 +143,7 @@ Issue #1 moves these files out of `conductor/`.
 
 ## Framework documentation
 
-The prose documentation for the framework lives in `conductor/framework/`:
+The prose documentation for the framework lives in `docs/framework/`:
 
 | File | Subject |
 |---|---|
@@ -156,9 +156,8 @@ The prose documentation for the framework lives in `conductor/framework/`:
 | `workflows.md` | the outbox, the runner, the scheduler |
 | `security.md` | ACL and RLS |
 | `observability.md` | logging and request tracing |
-| `maintenance.md` | outbox retention and cleanup |
+| `maintenance.md` | safe schema sync and migrations |
 
-Issue #1 moves these files to `docs/`.
 
 ## Git
 
