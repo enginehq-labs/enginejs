@@ -104,6 +104,20 @@ missing. `.github/workflows/ci.yml` fails the build if any test reports a skip.
 `.github/workflows/ci.yml` runs on each push to `main` and on each pull request. The
 steps are install, build, typecheck, unit tests, integration tests, and the skip guard.
 
+## Project rules
+
+- `@enginehq/core` stays framework-agnostic. It imports no adapter or auth package.
+- All four packages share one version, and they pin each other to that exact version.
+  `npm run release:publish` publishes them in the order core, auth, express, enginehq.
+- Follow Semantic Versioning. During the Technical Preview a breaking change is
+  allowed, but record it in the release notes.
+- Do not add a hardcoded secret. Read secrets from the environment. The `--auth`
+  scaffold still writes a `'dev'` JWT secret fallback, and issue #9 tracks it.
+- Keep ACL and RLS on for CRUD operations. A bypass must be explicit, with the
+  `bypassAclRls` call option. The code does not log bypasses today (issue #9).
+
+The product vision is in `docs/product.md`.
+
 ## Development model
 
 EngineJS is a code-first monorepo. The code in `core/`, `auth/`, `express/`, and
