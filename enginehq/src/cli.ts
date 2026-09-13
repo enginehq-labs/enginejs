@@ -290,13 +290,29 @@ export const ops = {
             email: { type: 'string', required: true, canfind: true },
             password: { type: 'string', save: false },
             password_hash: { type: 'string' },
-            roles: { type: 'array' },
+            roles: { type: 'string', multi: true },
           },
           indexes: { unique: [['email']], many: [], lower: [] },
+          // hashPassword hashes the virtual password on every create and update.
+          // remove keeps password_hash out of every response.
+          pipelines: {
+            create: {
+              beforePersist: [{ op: 'custom', name: 'hashPassword' }],
+              response: [{ op: 'remove', fields: ['password_hash'] }],
+            },
+            update: {
+              beforePersist: [{ op: 'custom', name: 'hashPassword' }],
+              response: [{ op: 'remove', fields: ['password_hash'] }],
+            },
+            read: { response: [{ op: 'remove', fields: ['password_hash'] }] },
+            list: { response: [{ op: 'remove', fields: ['password_hash'] }] },
+          },
+          // The built-in auth routes read and create users as the 'system' role.
+          // Only admin may change or delete a user.
           access: {
-            read:   ['*'],
-            create: ['*'],
-            update: ['*'],
+            read:   ['system', 'admin'],
+            create: ['system', 'admin'],
+            update: ['admin'],
             delete: ['admin'],
           },
         },

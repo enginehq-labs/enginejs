@@ -39,6 +39,28 @@ describe('initEngineJsApp', () => {
     assert.ok(model.user.fields?.email, 'user model should have email field');
     assert.ok(model.user.fields?.password_hash, 'user model should have password_hash field');
 
+    // roles must be a real array column, or roles never reach the actor.
+    assert.deepEqual(model.user.fields.roles, { type: 'string', multi: true });
+
+    // No anonymous access, and no role other than admin may change users.
+    const access = model.user.access;
+    for (const action of ['read', 'create', 'update', 'delete']) {
+      assert.ok(!access[action].includes('*'), `user.${action} must not allow '*'`);
+    }
+    assert.ok(!access.update.includes('system'), 'user.update must not allow system');
+    assert.ok(!access.delete.includes('system'), 'user.delete must not allow system');
+
+    // Every create and update path hashes the password.
+    const hashOp = { op: 'custom', name: 'hashPassword' };
+    assert.deepEqual(model.user.pipelines.create.beforePersist, [hashOp]);
+    assert.deepEqual(model.user.pipelines.update.beforePersist, [hashOp]);
+
+    // No response returns the hash.
+    const removeHash = { op: 'remove', fields: ['password_hash'] };
+    for (const action of ['create', 'update', 'read', 'list']) {
+      assert.deepEqual(model.user.pipelines[action].response, [removeHash], `${action}.response must remove the hash`);
+    }
+
     // enginejs.config.ts should contain auth.local section
     const config = fs.readFileSync(path.join(dir, 'enginejs.config.ts'), 'utf-8');
     assert.ok(config.includes('local:'), 'config should include auth.local section');
