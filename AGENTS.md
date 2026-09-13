@@ -114,8 +114,8 @@ steps are install, build, typecheck, unit tests, integration tests, and the skip
   `npm run release:publish` publishes them in the order core, auth, express, enginehq.
 - Follow Semantic Versioning. During the Technical Preview a breaking change is
   allowed, but record it in the release notes.
-- Do not add a hardcoded secret. Read secrets from the environment. The `--auth`
-  scaffold still writes a `'dev'` JWT secret fallback, and issue #9 tracks it.
+- Do not add a hardcoded secret. Read secrets from the environment. The runtime
+  refuses a JWT secret shorter than 32 characters.
 - Keep ACL and RLS on for CRUD operations. A bypass must be explicit, with the
   `bypassAclRls` call option. The code does not log bypasses today (issue #9).
 

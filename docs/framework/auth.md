@@ -19,6 +19,14 @@ EngineJS uses self-contained JWTs for access tokens.
 - **Signing**: Done via `signActorAccessTokenHS256`, which bundles the actor's identity into the token payload.
 - **Verification**: Done via `verifyActorAccessTokenHS256`. It ensures the signature is valid, the token is not expired, and optionally validates the session against a store.
 
+### Secret
+Set `auth.jwt.accessSecret` from the `JWT_SECRET` environment variable. The secret must have 32 or more characters.
+- `createExpressApp` throws when `auth.local` is set and the secret is shorter.
+- The `enginehq` runtime throws at startup when the secret is set and shorter.
+- An empty secret turns off the JWT resolver. Every request then gets the anonymous actor.
+
+The `enginehq init` scaffolds write `process.env.JWT_SECRET ?? ''`, with no default value.
+
 ### Token TTL
 Durations can be specified using human-readable strings:
 - `s`: Seconds

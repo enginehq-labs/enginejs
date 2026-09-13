@@ -27,7 +27,7 @@ Actors in EngineJS can hold multiple "subjects". `actor.subjects` is a map keyed
 ### RLS Scoping (Read/List)
 The `RlsEngine` generates abstract "where" clauses that are transformed into Sequelize predicates.
 - **Field rule `{ subject, field }`:** Matches the subject ID of the actor to a field (e.g., `customer_id = 42`).
-- **`via` rule (Join Paths):** Scopes access through a chain of relationships. The engine generates a `WHERE <primary key> IN (SELECT ...)` subquery that follows the path. It checks the `deleted` and `archived` flags on each model that has those columns. If the chain does not start at the root model, or a model in the chain is missing, no filter is applied and the rows are not scoped (issue #9).
+- **`via` rule (Join Paths):** Scopes access through a chain of relationships. The engine generates a `WHERE <primary key> IN (SELECT ...)` subquery that follows the path. It checks the `deleted` and `archived` flags on each model that has those columns. `engine.init` throws when a chain is empty, does not start at the policy model, has a step that does not start where the previous step ends, or uses an unknown model. If a chain still cannot convert at request time, the filter matches no row.
 - **`anyOf` / `allOf`:** Logical combinators for building complex policies. `anyOf` ignores branches where the required subject is missing from the actor.
 
 ### RLS Write Guards (Create/Update)
