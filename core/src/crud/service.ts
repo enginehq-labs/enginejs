@@ -794,7 +794,27 @@ export class CrudService {
             nextPage: ast.page < Math.max(1, Math.ceil(totalCount / limit)) ? ast.page + 1 : null,
             previousPage: ast.page > 1 ? ast.page - 1 : null,
           };
-    const prunedRows = rows.map((r) => pruneRowToDsl(spec, r as any));
+    // bypassAclRls skips ACL and RLS only, as in read(). No ACL pruning here.
+    const runPipelines = args.options?.runPipelines !== false;
+    const runResponsePipeline = args.options?.runResponsePipeline !== false;
+    const registry = this.getPipelineRegistry();
+    const services = args.options?.services ?? this.pipelineServices();
+    const prunedRows = rows.map((r) => {
+      const piped =
+        runPipelines && runResponsePipeline
+          ? this.pipelines.runPhase({
+              dsl,
+              registrySpec: registry?.get?.(args.modelKey),
+              action: 'list',
+              phase: 'response',
+              modelKey: args.modelKey,
+              actor: args.actor,
+              input: r as any,
+              services,
+            }).output
+          : r;
+      return pruneRowToDsl(spec, piped as any);
+    });
     return {
       rows: prunedRows,
       pagination,

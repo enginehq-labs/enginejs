@@ -419,3 +419,93 @@ test('CrudService: a call with no bypass writes no audit log line', async () => 
 
   assert.equal(lines.filter((l) => l.msg === '[crud] audited bypass').length, 0);
 });
+
+/**
+ * Records each pipeline phase that runs. Every action and phase has its own custom op,
+ * so a test can check which phases ran and in which order.
+ */
+function buildPhaseHarness() {
+  const dsl: DslRoot = {
+    link: {
+      fields: {
+        id: { type: 'int', primary: true },
+        slug: { type: 'string' },
+        secret: { type: 'string' },
+      },
+      access: { read: ['admin'], create: ['admin'], update: ['admin'], delete: ['admin'] },
+    } as any,
+  };
+
+  const stored = { id: 1, slug: 'my-link', secret: 'hash' };
+  const persisted: Array<Record<string, unknown>> = [];
+  const instance = {
+    get: () => ({ ...stored }),
+    update: async (payload: any) => {
+      persisted.push(payload);
+      Object.assign(stored, payload);
+    },
+  };
+
+  const orm: OrmInitResult = {
+    sequelize: {
+      transaction: async (cb: any) => cb({}),
+      Sequelize: { Op: { and: Symbol('and'), or: Symbol('or') }, literal: () => '' },
+    } as any,
+    models: {
+      link: {
+        primaryKeyAttributes: ['id'],
+        rawAttributes: { id: {}, slug: {}, secret: {} },
+        associations: {},
+        findAll: async () => [{ ...stored }],
+        count: async () => 1,
+        findOne: async () => instance,
+        create: async (payload: any) => {
+          persisted.push(payload);
+          return { get: () => ({ id: 1, ...payload }) };
+        },
+      },
+    } as any,
+    junctionModels: {},
+    dsl,
+  };
+
+  const ran: string[] = [];
+  const actions = ['list', 'read', 'create', 'update', 'delete'];
+  const phases = ['beforeValidate', 'validate', 'beforePersist', 'afterPersist', 'response'];
+  const spec: Record<string, Record<string, unknown[]>> = {};
+  const services = new DefaultServiceRegistry();
+  for (const action of actions) {
+    spec[action] = {};
+    for (const phase of phases) {
+      const name = `${action}_${phase}`;
+      spec[action]![phase] = [{ op: 'custom', name }];
+      services.register(`pipelines.custom.${name}`, 'singleton', () => (ctx: any) => {
+        ran.push(`${action}.${phase}`);
+        return { output: ctx.input };
+      });
+    }
+  }
+  services.register('dsl', 'singleton', () => dsl);
+  services.register('orm', 'singleton', () => orm);
+  services.register('config', 'singleton', () => ({ rls: { subjects: {}, policies: {} } }) as unknown as EngineConfig);
+  services.register('pipelines', 'singleton', () => ({ get: () => spec }));
+
+  const actor = { isAuthenticated: true, subjects: {}, roles: ['admin'], claims: {} };
+  return { service: new CrudService({ services }), ran, persisted, spec, actor };
+}
+
+test('CrudService: list with bypassAclRls runs the response pipeline', async () => {
+  const { service, ran, actor } = buildPhaseHarness();
+
+  await service.list({ actor, modelKey: 'link', options: { bypassAclRls: true } });
+
+  assert.deepEqual(ran, ['list.response']);
+});
+
+test('CrudService: list with bypassAclRls honours runResponsePipeline false', async () => {
+  const { service, ran, actor } = buildPhaseHarness();
+
+  await service.list({ actor, modelKey: 'link', options: { bypassAclRls: true, runResponsePipeline: false } });
+
+  assert.deepEqual(ran, []);
+});
