@@ -9,6 +9,7 @@ import { PipelineEngine } from '../pipelines/engine.js';
 import { initSequelizeModelsFromDsl } from '../orm/sequelizeAdapter.js';
 import type { OrmInitResult } from '../orm/types.js';
 import { RlsEngine } from '../rls/engine.js';
+import { validateRlsPolicies } from '../rls/validate.js';
 import { DefaultServiceRegistry } from '../services/DefaultServiceRegistry.js';
 import { DefaultPipelineRegistry } from '../services/DefaultPipelineRegistry.js';
 import { DefaultWorkflowRegistry } from '../services/DefaultWorkflowRegistry.js';
@@ -183,6 +184,8 @@ export function createEngine(config: EngineConfig): EngineRuntime {
     if (!(compiled.dsl as any).dsl) {
       throw new Error('Missing required meta model: dsl (create dsl/meta/dsl.json)');
     }
+
+    validateRlsPolicies(config.rls, compiled.dsl as DslRoot);
 
     for (const modelKey of Object.keys(compiled.dsl).filter((k) => k !== '$schema').sort((a, b) => a.localeCompare(b))) {
       const spec = (compiled.dsl as any)[modelKey];
