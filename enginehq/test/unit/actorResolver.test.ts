@@ -7,7 +7,7 @@ import type { Actor } from '@enginehq/core';
 import { createActorResolver } from '../../src/runtime/actorResolver.js';
 import type { EngineJsAppConfig } from '../../src/runtime/config.js';
 
-const SECRET = 'test-secret';
+const SECRET = 'test-secret-'.padEnd(32, 'x');
 
 const USER_ACTOR: Actor = {
   isAuthenticated: true,
@@ -81,4 +81,14 @@ test('actor resolver: a resolveActor that returns null gives the anonymous actor
 
 test('actor resolver: no secret and no resolveActor gives no resolver', () => {
   assert.equal(createActorResolver(makeConfig({}, null)), undefined);
+});
+
+test('actor resolver: a JWT secret shorter than 32 characters throws', () => {
+  assert.throws(() => createActorResolver(makeConfig({}, 'x'.repeat(31))), /at least 32 characters/);
+});
+
+test('actor resolver: an empty JWT secret gives no resolver', () => {
+  const cfg = makeConfig({}, null);
+  (cfg.engine as any).auth = { jwt: { accessSecret: '', accessTtl: '15m' } };
+  assert.equal(createActorResolver(cfg), undefined);
 });

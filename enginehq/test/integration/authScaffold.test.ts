@@ -21,7 +21,7 @@ const runtimeEntry = path.join(packageRoot, 'dist', 'runtime', 'app.js');
 
 const PASSWORD = 'enginejs';
 const DB_NAME = 'enginejs_auth_scaffold';
-const JWT_SECRET = 'auth-scaffold-secret';
+const JWT_SECRET = 'auth-scaffold-secret-'.padEnd(32, 'x');
 
 function dockerAvailable(): boolean {
   try {

@@ -1,7 +1,7 @@
 import type { Request } from 'express';
 
 import type { Actor } from '@enginehq/core';
-import { getBearerToken, verifyActorAccessTokenHS256 } from '@enginehq/auth';
+import { assertJwtSecret, getBearerToken, verifyActorAccessTokenHS256 } from '@enginehq/auth';
 
 import type { EngineJsAppConfig } from './config.js';
 
@@ -20,6 +20,7 @@ export function createActorResolver(cfg: EngineJsAppConfig): ((req: Request) => 
 
   const accessSecret = cfg.engine.auth?.jwt?.accessSecret;
   if (!accessSecret) return undefined;
+  assertJwtSecret(accessSecret);
 
   return async (req) => {
     const token = getBearerToken(req.headers.authorization);

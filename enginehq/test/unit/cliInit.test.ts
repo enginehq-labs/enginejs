@@ -56,3 +56,13 @@ test('enginehq initEngineJsApp refuses non-empty dir unless --force', () => {
   initEngineJsApp({ dir: appDir, force: true });
   assert.ok(fs.existsSync(path.join(appDir, 'enginejs.config.ts')));
 });
+
+test('enginehq initEngineJsApp writes no default JWT secret', () => {
+  for (const auth of [false, true]) {
+    const appDir = path.join(tmpDir(), 'my-app');
+    initEngineJsApp({ dir: appDir, auth });
+    const cfg = fs.readFileSync(path.join(appDir, 'enginejs.config.ts'), 'utf8');
+    assert.doesNotMatch(cfg, /'dev'/, `auth: ${auth}`);
+    assert.match(cfg, /accessSecret: process\.env\.JWT_SECRET \?\? ''/, `auth: ${auth}`);
+  }
+});
