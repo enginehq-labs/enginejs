@@ -213,6 +213,20 @@ test('docker postgres: RLS via chain scopes list/read through joins', async (t) 
               { fromModel: 'order', fromField: 'customer_id', toModel: 'customer', toField: 'id' },
             ],
           } as any,
+          create: {
+            subject: 'customer',
+            via: [
+              { fromModel: 'order_item', fromField: 'order_id', toModel: 'order', toField: 'id' },
+              { fromModel: 'order', fromField: 'customer_id', toModel: 'customer', toField: 'id' },
+            ],
+          } as any,
+          update: {
+            subject: 'customer',
+            via: [
+              { fromModel: 'order_item', fromField: 'order_id', toModel: 'order', toField: 'id' },
+              { fromModel: 'order', fromField: 'customer_id', toModel: 'customer', toField: 'id' },
+            ],
+          } as any,
         },
       },
     },
@@ -256,6 +270,28 @@ test('docker postgres: RLS via chain scopes list/read through joins', async (t) 
     const readBody = (await readRes.json()) as any;
     assert.equal(readRes.status, 200);
     assert.equal(readBody.data.name, 'only-mine');
+
+    // A via write policy checks the new row, so a write that leaves the actor's scope fails.
+    const send = (method: string, path: string, body: unknown) =>
+      fetch(`${url}/api/crud/${path}`, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const countBefore = await OrderItem.count();
+
+    const badCreate = await send('POST', 'order_item', { order_id: o2.id, name: 'on-other-order' });
+    assert.equal(badCreate.status, 403);
+    assert.equal(await OrderItem.count(), countBefore, 'the refused create must roll back');
+
+    const goodCreate = await send('POST', 'order_item', { order_id: o1.id, name: 'mine-too' });
+    assert.equal(goodCreate.status, 201);
+    assert.equal(await OrderItem.count(), countBefore + 1);
+
+    // A forbidden update gives 404, because hideExistence is not set to false.
+    const badUpdate = await send('PATCH', `order_item/${id}`, { order_id: o2.id });
+    assert.equal(badUpdate.status, 404);
+    assert.equal((await OrderItem.findByPk(id)).order_id, o1.id, 'the refused update must roll back');
+
+    const goodUpdate = await send('PATCH', `order_item/${id}`, { name: 'renamed' });
+    assert.equal(goodUpdate.status, 200);
+    assert.equal((await OrderItem.findByPk(id)).name, 'renamed');
   } finally {
     server.close();
     await sequelize.close();

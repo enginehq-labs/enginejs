@@ -5,6 +5,7 @@ import type { EngineConfig } from '../config/types.js';
 import { AclEngine } from '../acl/engine.js';
 import { RlsEngine } from '../rls/engine.js';
 import { rlsWhereToSequelize } from '../rls/toSequelizeWhere.js';
+import type { RlsWhere } from '../rls/where.js';
 import type { OrmInitResult } from '../orm/types.js';
 import type { DslModelSpec, DslRoot } from '../dsl/types.js';
 import { isDslModelSpec } from '../dsl/types.js';
@@ -276,6 +277,36 @@ function applyWriteGuard(args: { guard: any; payload: Record<string, unknown> })
     throw e;
   }
   return payload;
+}
+
+function whereHasVia(where: RlsWhere | null | undefined): boolean {
+  if (!where) return false;
+  if ('via' in where) return true;
+  if ('and' in where) return where.and.some(whereHasVia);
+  if ('or' in where) return where.or.some(whereHasVia);
+  return false;
+}
+
+/**
+ * A via rule guards no field, so the written row is selected with the via subquery.
+ * The count runs in the write transaction, and the throw rolls the write back.
+ */
+async function assertWriteInViaScope(args: {
+  orm: OrmInitResult;
+  model: ModelStatic<Model>;
+  modelKey: string;
+  id: unknown;
+  where: RlsWhere | null;
+  transaction: any;
+}): Promise<void> {
+  if (!whereHasVia(args.where)) return;
+  const pk = getPrimaryKeyField(args.model);
+  const { Op } = getSequelizeLib(args.orm);
+  const count = await (args.model as any).count({
+    where: { [Op.and]: [{ [pk]: args.id }, rlsWhereToSequelize(args.orm, args.modelKey, args.where)] },
+    transaction: args.transaction,
+  });
+  if (!count) throw new CrudForbiddenError('RLS write guard');
 }
 
 function modelSpec(dsl: DslRoot, modelKey: string): DslModelSpec {
@@ -772,6 +803,7 @@ export class CrudService {
       const rls = new RlsEngine(config.rls);
       const guard = rls.writeGuard({ actor: args.actor, modelKey: args.modelKey, action: 'create' });
       if (!guard.allow) throw new CrudForbiddenError((guard as any).reason || 'RLS denied');
+      const writeScope = rls.scope({ actor: args.actor, modelKey: args.modelKey, action: 'create' });
 
       const runPipelines = args.options?.runPipelines !== false;
       const registry = this.getPipelineRegistry();
@@ -831,6 +863,15 @@ export class CrudService {
           spec,
           instance: created,
           joinPayloads,
+          transaction: t,
+        });
+
+        await assertWriteInViaScope({
+          orm,
+          model,
+          modelKey: args.modelKey,
+          id: row?.[getPrimaryKeyField(model)],
+          where: writeScope.where,
           transaction: t,
         });
       });
@@ -1153,6 +1194,8 @@ export class CrudService {
           joinPayloads,
           transaction: t,
         });
+
+        await assertWriteInViaScope({ orm, model, modelKey: args.modelKey, id: args.id, where: scope.where, transaction: t });
       });
 
       if (runPipelines) {
