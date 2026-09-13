@@ -525,3 +525,30 @@ test('CrudService: create with bypassAclRls honours runResponsePipeline false', 
 
   assert.deepEqual(ran, ['create.beforeValidate', 'create.validate', 'create.beforePersist', 'create.afterPersist']);
 });
+
+test('CrudService: update with bypassAclRls runs every phase in order', async () => {
+  const { service, ran, actor } = buildPhaseHarness();
+
+  await service.update({ actor, modelKey: 'link', id: 1, values: { slug: 'b' }, options: { bypassAclRls: true } });
+
+  assert.deepEqual(ran, ['update.beforeValidate', 'update.validate', 'update.beforePersist', 'update.afterPersist', 'update.response']);
+});
+
+test('CrudService: update with bypassAclRls saves the beforePersist output', async () => {
+  const { service, persisted, spec, actor } = buildPhaseHarness();
+  // Stands in for hashPassword: an op that writes a field before the row is saved.
+  spec.update!.beforePersist!.push({ op: 'set', field: 'secret', value: 'new-hash' });
+
+  await service.update({ actor, modelKey: 'link', id: 1, values: { slug: 'b' }, options: { bypassAclRls: true } });
+
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0]!.secret, 'new-hash');
+});
+
+test('CrudService: update with bypassAclRls honours runPipelines false', async () => {
+  const { service, ran, actor } = buildPhaseHarness();
+
+  await service.update({ actor, modelKey: 'link', id: 1, values: { slug: 'b' }, options: { bypassAclRls: true, runPipelines: false } });
+
+  assert.deepEqual(ran, []);
+});

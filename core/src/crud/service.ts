@@ -1294,6 +1294,44 @@ export class CrudService {
     payload = coerceEmptyToNull(spec, normalizedBody);
     const autoName = computeAutoName(dsl, args.modelKey, { ...before, ...payload });
     if (autoName !== null) payload.auto_name = autoName;
+
+    // bypassAclRls skips ACL and RLS only, so the pipelines run as in the normal branch.
+    const runPipelines = args.options?.runPipelines !== false;
+    const registry = this.getPipelineRegistry();
+    const services = args.options?.services ?? this.pipelineServices();
+    if (runPipelines) {
+      payload = this.pipelines.runPhase({
+        dsl,
+        registrySpec: registry?.get?.(args.modelKey),
+        action: 'update',
+        phase: 'beforeValidate',
+        modelKey: args.modelKey,
+        actor: args.actor,
+        input: payload,
+        services,
+      }).output;
+      this.pipelines.runPhase({
+        dsl,
+        registrySpec: registry?.get?.(args.modelKey),
+        action: 'update',
+        phase: 'validate',
+        modelKey: args.modelKey,
+        actor: args.actor,
+        input: payload,
+        services,
+      });
+      payload = this.pipelines.runPhase({
+        dsl,
+        registrySpec: registry?.get?.(args.modelKey),
+        action: 'update',
+        phase: 'beforePersist',
+        modelKey: args.modelKey,
+        actor: args.actor,
+        input: payload,
+        services,
+      }).output;
+    }
+
     payload = stripVirtualFields(spec, payload);
     await (orm.sequelize as any).transaction(async (t: any) => {
       await (existing as any).update(payload, { transaction: t });
@@ -1306,7 +1344,32 @@ export class CrudService {
         transaction: t,
       });
     });
-    const row = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
+    let row = (existing as any)?.get ? (existing as any).get({ plain: true }) : (existing as any);
+    if (runPipelines) {
+      row = this.pipelines.runPhase({
+        dsl,
+        registrySpec: registry?.get?.(args.modelKey),
+        action: 'update',
+        phase: 'afterPersist',
+        modelKey: args.modelKey,
+        actor: args.actor,
+        input: row,
+        services,
+      }).output;
+
+      if (args.options?.runResponsePipeline !== false) {
+        row = this.pipelines.runPhase({
+          dsl,
+          registrySpec: registry?.get?.(args.modelKey),
+          action: 'update',
+          phase: 'response',
+          modelKey: args.modelKey,
+          actor: args.actor,
+          input: row,
+          services,
+        }).output;
+      }
+    }
     await addFkAutoNames({ orm, dsl, modelKey: args.modelKey, rows: [row as any] });
     await this.emitWorkflow({ modelKey: args.modelKey, action: 'update', before, after: row, actor: args.actor, origin: args.origin, originChain: args.originChain, parentEventId: args.parentEventId });
     return pruneRowToDsl(spec, row as any);
