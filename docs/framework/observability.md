@@ -4,7 +4,7 @@ EngineJS provides a built-in observability system based on structured JSON loggi
 
 ## Core Logger
 
-The system uses `pino` under the hood to produce high-performance JSON logs. The logger is available as a singleton service in the Engine container.
+The system uses `pino` to produce JSON logs. When `app.env` is `development`, the output goes through `pino-pretty` instead. The logger is available as a singleton service in the Engine container.
 
 ### Interface
 
@@ -26,7 +26,7 @@ When implementing custom routes, you can resolve the logger from the engine serv
 
 ```typescript
 app.get('/custom', async (req, res) => {
-  const logger = req.services.resolve<Logger>('logger', { scope: 'singleton' });
+  const logger = req.services.get<Logger>('logger');
   
   logger.info('Custom route accessed', { query: req.query });
   
@@ -45,12 +45,12 @@ Logs generated within a workflow automatically include the `traceId` of the even
 }
 ```
 
-Or via custom steps:
+Or via custom steps. A step receives `{ event, actor, args }` and no `services`, so resolve the logger from the engine:
 
 ```typescript
-registry.register('workflows.step.my-step', 'singleton', () => async (ctx) => {
-  const logger = ctx.services.resolve<Logger>('logger', { scope: 'singleton' });
-  logger.info('Executing custom step');
+engine.services.register('workflows.step.my-step', 'singleton', () => async ({ event }) => {
+  const logger = engine.services.resolve<Logger>('logger', { scope: 'singleton' });
+  logger.info('Executing custom step', { eventId: event.id });
 });
 ```
 
@@ -62,7 +62,7 @@ Every HTTP request is assigned a unique `traceId`.
 2.  **Propagation:** The `traceId` is stored in an `AsyncLocalStorage` context (`RequestContext`) during the request lifecycle.
 3.  **Automatic Inclusion:** The logger automatically includes the current `traceId` in every log message via a Pino mixin.
 4.  **Workflow Correlation:** When an event is emitted to the workflow outbox, the current `traceId` is stored with it. The Workflow Runner then restores this `traceId` in the `RequestContext` before executing the workflow.
-5.  **Database Correlation:** Sequelize queries automatically include the `traceId` as a SQL comment (e.g., `/* traceId=... */`) for correlation in database logs.
+5.  **Database Correlation:** Not working today. The Sequelize hooks set a `traceId` comment option, but the comment does not reach the SQL (issue #11). SQL logging is also off unless `db.logging` is set.
 
 ## Configuration
 
@@ -72,7 +72,7 @@ You can configure the log level in the engine config:
 const engine = createEngine({
   app: { name: 'my-app', env: 'development' },
   logging: {
-    level: 'debug' // Default is 'info'
+    level: 'debug' // Default: 'debug' when app.env is 'development', else 'info'
   },
   // ...
 });
