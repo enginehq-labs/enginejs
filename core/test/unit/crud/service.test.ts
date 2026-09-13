@@ -140,6 +140,91 @@ test('CrudService: list handles junction field filters', async () => {
   }
 });
 
+/**
+ * Runs a bypass list on one `item` model and records the `where` that findAll receives.
+ * The Sequelize stubs return plain objects, so a test can read the built query.
+ */
+function buildFilterHarness(fields: Record<string, unknown>) {
+  const Op = {
+    and: Symbol('and'),
+    or: Symbol('or'),
+    in: Symbol('in'),
+    notIn: Symbol('notIn'),
+    ne: Symbol('ne'),
+    iLike: Symbol('iLike'),
+    contains: Symbol('contains'),
+    not: Symbol('not'),
+    gt: Symbol('gt'),
+    gte: Symbol('gte'),
+    lt: Symbol('lt'),
+    lte: Symbol('lte'),
+  };
+  const dsl = {
+    tag: { fields: { id: { type: 'int', primary: true } } },
+    item: { fields: { id: { type: 'int', primary: true }, ...fields } },
+  } as unknown as DslRoot;
+
+  const wheres: any[] = [];
+  const orm: OrmInitResult = {
+    sequelize: {
+      Sequelize: {
+        Op,
+        literal: (sql: string) => `LITERAL(${sql})`,
+        where: (left: unknown, cond: unknown) => ({ WHERE: left, cond }),
+        fn: (name: string, ...args: unknown[]) => ({ FN: name, args }),
+        col: (name: string) => ({ COL: name }),
+      },
+      escape: (v: unknown) => `'${v}'`,
+    } as any,
+    models: {
+      item__tags__to__tag__id: { findAll: async () => [] },
+      item: {
+        primaryKeyAttributes: ['id'],
+        associations: {},
+        findAll: async (opts: any) => {
+          wheres.push(opts.where);
+          return [];
+        },
+        count: async () => 0,
+      },
+    } as any,
+    junctionModels: {},
+    dsl,
+  };
+
+  const services = new DefaultServiceRegistry();
+  services.register('dsl', 'singleton', () => dsl);
+  services.register('orm', 'singleton', () => orm);
+  services.register('config', 'singleton', () => ({}) as EngineConfig);
+
+  const actor = { isAuthenticated: true, subjects: {}, roles: ['admin'], claims: {} };
+  const list = async (filters: string) => {
+    await new CrudService({ services }).list({
+      actor,
+      modelKey: 'item',
+      query: { filters },
+      options: { bypassAclRls: true, runPipelines: false },
+    });
+    return wheres[wheres.length - 1];
+  };
+  return { list, Op };
+}
+
+test('CrudService: a filter on a save: false field adds no where part', async () => {
+  const { list } = buildFilterHarness({ nick: { type: 'string', save: false } });
+
+  assert.deepEqual(await list('nick:alice'), {});
+});
+
+test('CrudService: a filter on an integer junction field uses the junction subquery', async () => {
+  const { list, Op } = buildFilterHarness({ tags: { type: 'integer', multi: true, source: 'tag', sourceid: 'id' } });
+
+  const where = await list('tags:99');
+
+  assert.equal(where.tags, undefined, 'the filter must not reach the tags column');
+  assert.match(String(where.id?.[Op.in]), /SELECT "itemId" FROM "item__tags__to__tag__id" WHERE "tagId" = '99'/);
+});
+
 test('CrudService: create wraps operation in transaction if junction fields present', async () => {
   const dsl: DslRoot = {
     tag: { fields: { id: { type: 'int', primary: true } } },

@@ -20,7 +20,15 @@ import { PipelineValidationError } from '../pipelines/errors.js';
 
 import { CrudBadRequestError, CrudForbiddenError, CrudNotFoundError } from './errors.js';
 import type { CrudAction, CrudCallOptions, CrudCtx, CrudListQuery, CrudListResult } from './types.js';
-import { stripVirtualFields, pruneUnknownPayload, normalizePayloadMultiFields, computeChangedFields } from './utils.js';
+import {
+  stripVirtualFields,
+  pruneUnknownPayload,
+  normalizePayloadMultiFields,
+  computeChangedFields,
+  isVirtualField,
+  isStringArrayField,
+  isJunctionIntFkField,
+} from './utils.js';
 
 function getSequelizeLib(orm: OrmInitResult) {
   const Seq = (orm.sequelize as any).Sequelize ?? (orm.sequelize as any).constructor;
@@ -322,19 +330,6 @@ function getModel(orm: OrmInitResult, modelKey: string): ModelStatic<Model> {
 }
 
 
-
-// We will implement local helpers
-function isJunctionIntFkField(f: any): boolean {
-  if (!f || typeof f !== 'object') return false;
-  return f.type === 'int' && f.multi === true && !!f.source && !!f.sourceid;
-}
-function isStringArrayField(f: any): boolean {
-  if (!f || typeof f !== 'object') return false;
-  return f.type === 'string' && f.multi === true && !f.source;
-}
-function isVirtualField(f: any): boolean {
-  return f?.virtual === true;
-}
 
 function buildFilterExpr({
   orm,
