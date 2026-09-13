@@ -17,6 +17,11 @@ export type EngineJsAppConfig = {
   http: { host?: string; port: number };
   engine: EngineConfig;
   autoload?: EngineJsAutoloadConfig;
+  /**
+   * Resolves the actor for each request. Optional. When it is absent and
+   * engine.auth.jwt.accessSecret is set, the runtime verifies the Bearer token.
+   * When it is set, it replaces that JWT resolver. A null result gives the anonymous actor.
+   */
   resolveActor?: (req: Request) => Promise<Actor | null> | Actor | null;
 };
 
