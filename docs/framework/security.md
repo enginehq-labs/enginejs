@@ -32,8 +32,9 @@ The `RlsEngine` generates abstract "where" clauses that are transformed into Seq
 
 ### RLS Write Guards (Create/Update)
 For create and update, RLS operates in one of two modes. The default is `validate`. A delete uses the read scope filter, not a write guard.
-- **`enforce`:** The system overwrites the protected fields with the actor's subject IDs. A value from the client is replaced with no error. Only `{ subject, field }` rules add fields, so a `via` rule guards no field. The guard runs before the pipeline phases, so a pipeline op can change the field again (issue #9).
-- **`validate`:** The system checks each protected field that the payload contains, with strict equality. A missing field passes and is not filled in. A mismatch denies the request.
+- **`enforce`:** The system overwrites the protected fields with the actor's subject IDs. A value from the client is replaced with no error. Only `{ subject, field }` rules add fields. The guard runs before the pipeline phases and again after `beforePersist`, so a pipeline op cannot change a protected field.
+- **`validate`:** The system checks each protected field that the payload contains, with strict equality, before and after the pipeline phases. A missing field passes and is not filled in. A mismatch denies the request.
+- **`via` rules:** A `via` rule protects no field. On create and update, the system selects the written row with the `via` subquery inside the write transaction. If the row is out of scope, the write rolls back and the request is denied.
 
 ### Bypassing RLS
 RLS can be bypassed based on:
