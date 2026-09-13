@@ -36,6 +36,12 @@ function hasActiveFlags(model: ModelStatic<Model>): { deleted: boolean; archived
   return { deleted: !!attrs.deleted, archived: !!attrs.archived };
 }
 
+// Matches no row. A policy that cannot convert must deny, not drop the filter.
+function denyAll(orm: OrmInitResult) {
+  const { Op } = getSequelizeLib(orm);
+  return { [Op.or]: [] };
+}
+
 function viaToSequelize({
   orm,
   rootModelKey,
@@ -49,7 +55,7 @@ function viaToSequelize({
 }) {
   const { Op, literal } = getSequelizeLib(orm);
   const rootModel = (orm.models as any)[rootModelKey] as ModelStatic<Model> | undefined;
-  if (!rootModel) return null;
+  if (!rootModel) return denyAll(orm);
 
   const rootAlias = 't0';
   const rootTable = getTableName(rootModel);
@@ -62,10 +68,10 @@ function viaToSequelize({
   for (let i = 0; i < chain.length; i++) {
     const step = chain[i]!;
     const prev = aliases[i]!;
-    if (String(step.fromModel) !== prev.modelKey) return null;
+    if (String(step.fromModel) !== prev.modelKey) return denyAll(orm);
     const nextKey = String(step.toModel);
     const nextModel = (orm.models as any)[nextKey] as ModelStatic<Model> | undefined;
-    if (!nextModel) return null;
+    if (!nextModel) return denyAll(orm);
     aliases.push({ modelKey: nextKey, alias: `t${i + 1}`, model: nextModel });
   }
 
@@ -110,5 +116,5 @@ export function rlsWhereToSequelize(orm: OrmInitResult, modelKey: string, where:
   }
   if ((where as any).and) return { [Op.and]: ((where as any).and as any[]).map((x) => rlsWhereToSequelize(orm, modelKey, x)).filter(Boolean) };
   if ((where as any).or) return { [Op.or]: ((where as any).or as any[]).map((x) => rlsWhereToSequelize(orm, modelKey, x)).filter(Boolean) };
-  return null;
+  return denyAll(orm);
 }
