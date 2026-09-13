@@ -2,8 +2,8 @@
 
 Instructions for AI agents that work in the EngineJS repository.
 
-Claude Code reads `CLAUDE.md` first. That file holds the communication rules.
-This file holds the project facts.
+Claude Code loads this file through the `@AGENTS.md` import in `CLAUDE.md`. The
+communication rules for Claude Code are in `.claude/rules/communication.md`.
 
 ## What EngineJS is
 
