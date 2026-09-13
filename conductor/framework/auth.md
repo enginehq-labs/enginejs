@@ -1,4 +1,4 @@
-# EngineJS Framework — Auth & Sessions
+# EngineJS Framework: Auth & Sessions
 
 ## Introduction
 The Auth module (`@enginehq/auth`) provides a robust, identity-based authentication system for EngineJS. It utilizes JWT (JSON Web Tokens) with HS256 signing for stateless authentication and an optional session management system for stateful revocation and token rotation.
@@ -38,7 +38,7 @@ A custom `resolveActor` can still be supplied via `enginejs.config.ts` to overri
 
 ## Built-in Auth Routes (`auth.local`)
 
-When `auth.local` is configured, the runtime automatically mounts the following endpoints at `${basePath}/auth` — no custom route files needed.
+When `auth.local` is configured, the runtime automatically mounts the following endpoints at `${basePath}/auth`. No custom route files are needed.
 
 | Method | Path | Description |
 |---|---|---|
@@ -118,12 +118,12 @@ For applications requiring stateful control over logins, EngineJS provides a `Se
 ### Session Stores
 The built-in auth routes select a session store automatically. Precedence:
 
-1. **Custom** — a store registered in the ServiceRegistry as `authSessionStore`. Anything
+1. **Custom**: a store registered in the ServiceRegistry as `authSessionStore`. Anything
    implementing `AuthSessionStore` works (Redis, a bespoke table, a test double).
-2. **Configured** — `auth.sessions.store`:
+2. **Configured**, through `auth.sessions.store`:
    - `'memory'` always uses the in-memory store
    - `'model'` requires the DB model and throws at startup if it is missing
-3. **Auto** (the default) — the DB model when it exists, in-memory otherwise.
+3. **Auto** (the default): the DB model when it exists, in-memory otherwise.
 
 ```ts
 auth: {
@@ -141,7 +141,7 @@ auth: {
 
 The chosen store is logged at startup. Falling back to in-memory while
 `sessions.enabled` is true logs a **warning**: that store keeps sessions in process
-memory, so they are lost on restart and are not shared between workers — logout and
+memory, so they are lost on restart and are not shared between workers. Logout and
 refresh rotation then only hold within a single process. Use it for tests and local
 development only.
 
