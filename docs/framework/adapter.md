@@ -38,7 +38,9 @@ Every request to an EngineJS app passes through this middleware stack, in this o
 The framework automatically mounts a generic CRUD router. By default it mounts at `/api/crud`. Set `engine.http.crudPath` to change it. `engine.http.basePath` is added in front.
 
 The router maps HTTP verbs to model operations:
-- **`GET /api/crud/:model`**: List records. Supports `filters`, `sort`, `page`, `limit`, `includeDepth`, `includeDeleted` and `includeArchived`. The `find` search parameter does nothing today (issue #12).
+- **`GET /api/crud/:model`**: List records. Supports `filters`, `sort`, `page`, `limit`, `find`, `includeDepth`, `includeDeleted` and `includeArchived`.
+  - `find` searches `auto_name` and each field with `canfind: true`. For a `canfind` foreign key field, it searches the `auto_name` of the target model, with the target ACL and RLS, and uses at most 500 target IDs. A `*` in the value matches any text. A value with no `*` matches any part of the text.
+  - `includeDeleted` and `includeArchived` accept `1`, `true` and `yes`. Any other value keeps deleted or archived rows out.
 - **`GET /api/crud/:model/:id`**: Read a single record.
 - **`POST /api/crud/:model`**: Create a new record.
 - **`PATCH /api/crud/:model/:id`**: Update an existing record.

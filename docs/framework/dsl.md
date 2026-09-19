@@ -28,7 +28,7 @@ Before validation, every model is automatically augmented with mandatory system 
 - `created_at`, `updated_at`: Timestamps.
 - `deleted`, `deleted_at`: Soft-delete tracking.
 - `archived`, `archived_at`: Archival tracking.
-- `auto_name`: STRING field (512 chars) used for FK labels (`<field>_auto_name`). Search through `find` is not applied today (issue #12).
+- `auto_name`: STRING field (512 chars) used for FK labels (`<field>_auto_name`). The `find` search parameter always searches it.
 - `ui.sort`: Default list sort set to `["-created_at"]` if missing.
 
 ### Validation
@@ -83,13 +83,13 @@ The `includeDepth` query parameter recursively expands every association of the 
 
 - By default `includeDepth=0`. The response holds scalar values, plus junction ID arrays and `<field>_auto_name` keys.
 - Setting `includeDepth=1` automatically attaches the joined objects alongside their ID references. A junction field holds an array of joined objects instead of IDs, and `<field>_auto_name` keys are not added (e.g. for `company_id` with `source: "company"`, the nested key is the field `as` value, or else `company`).
-- Settings like `includeDepth=2` traverses deeper relations (e.g. `user` -> `company` -> `location`). `list` caps the depth at 10. `read` has no cap (issue #12).
+- Settings like `includeDepth=2` traverses deeper relations (e.g. `user` -> `company` -> `location`). `list` and `read` cap the depth at 10.
 
 ### Complex Filtering (`filters`)
 
 You can apply structured filters using the `filters` query parameter. Filters use a comma-separated list of `field:<op><value>` tokens. The field name ends at the first colon. The operator is optional and defaults to `eq`. `field:min..max` gives a range.
 
-- Supported operators: `=`, `>`, `<`, `>=`, `<=` and `!=`. With no operator or `=`, a value with `*` creates an ILIKE filter. The code does not change `*` to `%` today, so the wildcard does not match (issue #12).
+- Supported operators: `=`, `>`, `<`, `>=`, `<=` and `!=`. With no operator or `=`, a value with `*` creates an ILIKE filter, and each `*` matches any text. For example, `name:Al*` matches `Alice`.
 - Example: `status:=active,created_at:>=2025-01-01`.
 - **Logical AND / OR**: Same-field filter constraints are combined with `OR`, while constraints across different fields are combined with `AND`.
   - e.g. `name:=Alice,name:=Bob` resolves to `(name = 'Alice' OR name = 'Bob')`.
