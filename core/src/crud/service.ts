@@ -659,8 +659,8 @@ export class CrudService {
 
       const q = args.query || {};
       const ast = parseListQuery({
-        ...(q.includeDeleted ? { includeDeleted: '1' } : {}),
-        ...(q.includeArchived ? { includeArchived: '1' } : {}),
+        ...(q.includeDeleted != null ? { includeDeleted: q.includeDeleted } : {}),
+        ...(q.includeArchived != null ? { includeArchived: q.includeArchived } : {}),
         ...(q.includeDepth != null ? { includeDepth: String(q.includeDepth) } : {}),
         ...(q.page != null ? { page: String(q.page) } : {}),
         ...(q.limit != null ? { limit: String(q.limit) } : {}),
@@ -755,8 +755,8 @@ export class CrudService {
     try {
       const q = args.query || {};
       ast = parseListQuery({
-        ...(q.includeDeleted ? { includeDeleted: '1' } : {}),
-        ...(q.includeArchived ? { includeArchived: '1' } : {}),
+        ...(q.includeDeleted != null ? { includeDeleted: q.includeDeleted } : {}),
+        ...(q.includeArchived != null ? { includeArchived: q.includeArchived } : {}),
         ...(q.includeDepth != null ? { includeDepth: String(q.includeDepth) } : {}),
         ...(q.page != null ? { page: String(q.page) } : {}),
         ...(q.limit != null ? { limit: String(q.limit) } : {}),
@@ -1061,8 +1061,12 @@ export class CrudService {
     const config = this.getConfig();
     const spec = modelSpec(dsl, args.modelKey);
     const model = getModel(orm, args.modelKey);
-    const includeDeleted = !!args.query?.includeDeleted;
-    const includeArchived = !!args.query?.includeArchived;
+    // Parse the flags and the depth as list() does: '0' is false, and the depth is capped.
+    const { includeDeleted, includeArchived, includeDepth } = parseListQuery({
+      includeDeleted: args.query?.includeDeleted,
+      includeArchived: args.query?.includeArchived,
+      includeDepth: args.query?.includeDepth,
+    });
     const pk = getPrimaryKeyField(model);
 
     const bypass = args.options?.bypassAclRls === true;
@@ -1083,7 +1087,6 @@ export class CrudService {
       if (scopeWhere) whereParts.push(scopeWhere);
       const where = whereParts.length === 1 ? whereParts[0]! : { [getSequelizeLib(orm).Op.and]: whereParts };
 
-      const includeDepth = Number(args.query?.includeDepth) || 0;
       const include = includeDepth > 0
         ? buildIncludeGraph({
             orm,
@@ -1129,7 +1132,6 @@ export class CrudService {
     if (!includeDeleted && (model as any).rawAttributes?.deleted) whereParts.push({ deleted: false });
     if (!includeArchived && (model as any).rawAttributes?.archived) whereParts.push({ archived: false });
     const where = whereParts.length === 1 ? whereParts[0]! : { [getSequelizeLib(orm).Op.and]: whereParts };
-    const includeDepth = Number(args.query?.includeDepth) || 0;
     const include = includeDepth > 0
       ? buildIncludeGraph({
           orm,

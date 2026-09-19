@@ -242,6 +242,95 @@ test('CrudService: a * in a string array filter becomes the ILIKE wildcard', asy
   assert.equal(where.cond?.[Op.iLike], 'Al%');
 });
 
+/**
+ * A `node` model with deleted and archived columns. Its mock association points back to
+ * the same model, so the include graph can grow as deep as the depth allows.
+ */
+function buildIncludeHarness() {
+  const Op = { and: Symbol('and'), or: Symbol('or') };
+  const dsl = {
+    node: {
+      fields: { id: { type: 'int', primary: true } },
+      access: { read: ['admin'], create: ['admin'], update: ['admin'], delete: ['admin'] },
+    },
+  } as unknown as DslRoot;
+
+  const calls: any[] = [];
+  const node: any = {
+    primaryKeyAttributes: ['id'],
+    rawAttributes: { id: {}, deleted: {}, archived: {} },
+    findAll: async (opts: any) => {
+      calls.push(opts);
+      return [];
+    },
+    count: async () => 0,
+    findOne: async (opts: any) => {
+      calls.push(opts);
+      return { id: 1 };
+    },
+  };
+  node.associations = { parent: { associationType: 'BelongsTo', target: node } };
+
+  const orm: OrmInitResult = {
+    sequelize: { Sequelize: { Op, literal: () => '' } } as any,
+    models: { node } as any,
+    junctionModels: {},
+    dsl,
+  };
+
+  const services = new DefaultServiceRegistry();
+  services.register('dsl', 'singleton', () => dsl);
+  services.register('orm', 'singleton', () => orm);
+  services.register('config', 'singleton', () => ({ rls: { subjects: {}, policies: {} } }) as unknown as EngineConfig);
+
+  const actor = { isAuthenticated: true, subjects: {}, roles: ['admin'], claims: {} };
+  const service = new CrudService({ services });
+  const last = () => calls[calls.length - 1];
+  return { service, actor, Op, last };
+}
+
+function includeLevels(include: any[] | undefined): number {
+  let levels = 0;
+  let current = include;
+  while (current && current.length) {
+    levels += 1;
+    current = current[0].include;
+  }
+  return levels;
+}
+
+test('CrudService: list with includeDeleted "0" keeps the deleted filter', async () => {
+  const { service, actor, Op, last } = buildIncludeHarness();
+
+  await service.list({ actor, modelKey: 'node', query: { includeDeleted: '0' } as any, options: { bypassAclRls: true, runPipelines: false } });
+
+  assert.deepEqual(last().where[Op.and], [{ deleted: false }, { archived: false }]);
+});
+
+test('CrudService: list with includeDeleted true removes the deleted filter', async () => {
+  const { service, actor, last } = buildIncludeHarness();
+
+  await service.list({ actor, modelKey: 'node', query: { includeDeleted: true }, options: { bypassAclRls: true, runPipelines: false } });
+
+  assert.deepEqual(last().where, { archived: false });
+});
+
+test('CrudService: read with includeDeleted "0" keeps the deleted filter', async () => {
+  const { service, actor, Op, last } = buildIncludeHarness();
+
+  await service.read({ actor, modelKey: 'node', id: 1, query: { includeDeleted: '0' } as any, options: { runPipelines: false } });
+
+  assert.deepEqual(last().where[Op.and], [{ id: 1 }, { deleted: false }, { archived: false }]);
+});
+
+test('CrudService: read caps includeDepth at 10', async () => {
+  const { service, actor, last } = buildIncludeHarness();
+
+  await service.read({ actor, modelKey: 'node', id: 1, query: { includeDepth: '50' } as any, options: { runPipelines: false } });
+
+  assert.equal(includeLevels(last().include), 10);
+});
+
 test('CrudService: create wraps operation in transaction if junction fields present', async () => {
   const dsl: DslRoot = {
     tag: { fields: { id: { type: 'int', primary: true } } },
