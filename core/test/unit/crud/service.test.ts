@@ -198,11 +198,11 @@ function buildFilterHarness(fields: Record<string, unknown>) {
   services.register('config', 'singleton', () => ({}) as EngineConfig);
 
   const actor = { isAuthenticated: true, subjects: {}, roles: ['admin'], claims: {} };
-  const list = async (filters: string) => {
+  const list = async (filters: string, find?: string) => {
     await new CrudService({ services }).list({
       actor,
       modelKey: 'item',
-      query: { filters },
+      query: { filters, ...(find != null ? { find } : {}) },
       options: { bypassAclRls: true, runPipelines: false },
     });
     return wheres[wheres.length - 1];
@@ -240,6 +240,22 @@ test('CrudService: a * in a string array filter becomes the ILIKE wildcard', asy
 
   assert.deepEqual(where.WHERE, { FN: 'array_to_string', args: [{ COL: 'labels' }, ' '] });
   assert.equal(where.cond?.[Op.iLike], 'Al%');
+});
+
+test('CrudService: find searches auto_name and the canfind fields', async () => {
+  const { list, Op } = buildFilterHarness({ name: { type: 'string', canfind: true }, note: { type: 'string' } });
+
+  const where = await list('', 'ali');
+
+  assert.deepEqual(where, { [Op.or]: [{ auto_name: { [Op.iLike]: '%ali%' } }, { name: { [Op.iLike]: '%ali%' } }] });
+});
+
+test('CrudService: a * in find becomes the ILIKE wildcard', async () => {
+  const { list, Op } = buildFilterHarness({ name: { type: 'string', canfind: true } });
+
+  const where = await list('', 'Al*');
+
+  assert.deepEqual(where, { [Op.or]: [{ auto_name: { [Op.iLike]: 'Al%' } }, { name: { [Op.iLike]: 'Al%' } }] });
 });
 
 /**

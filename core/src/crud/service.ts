@@ -428,6 +428,84 @@ function filtersToWhere(
   return parts.length === 1 ? parts[0] : { [Op.and]: parts };
 }
 
+function toLikePattern(raw: string): string {
+  const s = raw.trim();
+  if (s.includes('*')) return s.replace(/\*/g, '%');
+  return `%${s}%`;
+}
+
+/**
+ * Builds the `find` search part of a list query. It searches auto_name and each canfind
+ * field. A canfind foreign key field matches through the auto_name of the target model.
+ * With enforce on, that lookup applies the target ACL and RLS, as a list of the target
+ * does. The lookup uses at most 500 target IDs.
+ */
+async function findToWhere(args: {
+  orm: OrmInitResult;
+  dsl: DslRoot;
+  actor: Actor;
+  spec: DslModelSpec;
+  ast: ListQueryAst;
+  enforce: boolean;
+  rls?: RlsEngine;
+}): Promise<any | null> {
+  const { orm, dsl, actor, spec, ast } = args;
+  const { Op, where, fn, col } = getSequelizeLib(orm);
+  const term = ast.find?.trim();
+  if (!term) return null;
+  const pattern = toLikePattern(term);
+
+  const orParts: any[] = [{ auto_name: { [Op.iLike]: pattern } }];
+
+  for (const [field, f] of Object.entries(spec.fields || {})) {
+    if (!f || typeof f !== 'object') continue;
+    if ((f as any).canfind !== true) continue;
+    if (isVirtualField(f as any)) continue;
+
+    if (isStringArrayField(f as any)) {
+      orParts.push(where(fn('array_to_string', col(field), ' '), { [Op.iLike]: pattern }));
+      continue;
+    }
+
+    const source = (f as any).source;
+    const sourceid = (f as any).sourceid;
+    if (source && sourceid) {
+      const targetKey = String(source);
+      const targetSpec = dsl[targetKey];
+      const targetModel = (orm.models as any)[targetKey];
+      if (!isDslModelSpec(targetSpec) || !targetModel) continue;
+
+      const targetWhereParts: any[] = [];
+      if (args.enforce) {
+        const aclRes = new AclEngine().can({ actor, modelKey: targetKey, modelSpec: targetSpec, action: 'read' });
+        if (!aclRes.allow) continue;
+        const scope = args.rls!.scope({ actor, modelKey: targetKey, action: 'list' });
+        if (!scope.allow) continue;
+        const scopeWhere = rlsWhereToSequelize(orm, targetKey, (scope as any).where);
+        if (scopeWhere) targetWhereParts.push(scopeWhere);
+      }
+      if (!ast.includeDeleted) targetWhereParts.push({ deleted: false });
+      if (!ast.includeArchived) targetWhereParts.push({ archived: false });
+      targetWhereParts.push({ auto_name: { [Op.iLike]: pattern } });
+
+      const ids = (await targetModel.findAll({
+        attributes: [String(sourceid)],
+        where: { [Op.and]: targetWhereParts },
+        raw: true,
+        limit: 500,
+      })) as Array<Record<string, unknown>>;
+      const values = ids.map((r) => r[String(sourceid)]).filter((x) => x != null);
+      if (values.length) orParts.push({ [field]: { [Op.in]: values } });
+      continue;
+    }
+
+    const type = String((f as any).type || '').toLowerCase();
+    if (type === 'string' || type === 'text') orParts.push({ [field]: { [Op.iLike]: pattern } });
+  }
+
+  return { [Op.or]: orParts };
+}
+
 function sortToOrder(sort: SortSpec[], pkField: string, spec?: DslModelSpec): any[] {
   const out: any[] = [];
   const addToken = (field: string, dir: string) => {
@@ -676,6 +754,8 @@ export class CrudService {
       if (scopeWhere) whereParts.push(scopeWhere);
       const filterWhere = filtersToWhere(ast, orm, model, spec, args.modelKey);
       if (filterWhere) whereParts.push(filterWhere);
+      const findWhere = await findToWhere({ orm, dsl, actor: args.actor, spec, ast, enforce: true, rls });
+      if (findWhere) whereParts.push(findWhere);
       const where = whereParts.length <= 1 ? (whereParts[0] ?? {}) : { [Op.and]: whereParts };
 
       const pk = getPrimaryKeyField(model);
@@ -774,6 +854,9 @@ export class CrudService {
     if (!ast.includeArchived && (model as any).rawAttributes?.archived) whereParts.push({ archived: false });
     const filterWhere = filtersToWhere(ast, orm, model, spec, args.modelKey);
     if (filterWhere) whereParts.push(filterWhere);
+    // bypassAclRls skips ACL and RLS, so the foreign key lookup skips them too.
+    const findWhere = await findToWhere({ orm, dsl, actor: args.actor, spec, ast, enforce: false });
+    if (findWhere) whereParts.push(findWhere);
     const where = whereParts.length <= 1 ? (whereParts[0] ?? {}) : { [Op.and]: whereParts };
 
     const pk = getPrimaryKeyField(model);
