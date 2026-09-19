@@ -134,6 +134,7 @@ test('docker postgres: crud consolidation features (includeDepth, complex filter
     JSON.stringify(
       {
         company: {
+          auto_name: ['name'],
           fields: { id: { type: 'int', primary: true, autoIncrement: true }, name: { type: 'string' } },
           access: { read: ['admin'], create: ['admin'], update: ['admin'], delete: ['admin'] },
         },
@@ -164,8 +165,8 @@ test('docker postgres: crud consolidation features (includeDepth, complex filter
         user: {
           fields: {
             id: { type: 'int', primary: true, autoIncrement: true },
-            company_id: { type: 'int', source: 'company', sourceid: 'id' },
-            name: { type: 'string' },
+            company_id: { type: 'int', source: 'company', sourceid: 'id', canfind: true },
+            name: { type: 'string', canfind: true },
             status: { type: 'string' },
             roles: { type: 'int', multi: true, source: 'role', sourceid: 'id' },
           },
@@ -287,6 +288,27 @@ test('docker postgres: crud consolidation features (includeDepth, complex filter
     assert.equal(filterBody2.success, true);
     assert.equal(filterBody2.data.length, 1);
     assert.equal(filterBody2.data[0].name, 'Bob');
+
+    const names = async (query: string) => {
+      const res = await fetch(`${url}/api/crud/user?${query}`);
+      const body = (await res.json()) as any;
+      assert.equal(body.success, true, `request failed: ${query}`);
+      return (body.data as any[]).map((u) => u.name).sort();
+    };
+
+    // find searches the canfind fields, and a foreign key through the target auto_name.
+    assert.deepEqual(await names('find=ali'), ['Alice']);
+    assert.deepEqual(await names('find=acme'), ['Alice', 'Bob']);
+    assert.deepEqual(await names('find=zzz'), []);
+
+    // A * in a filter value matches any text.
+    assert.deepEqual(await names(`filters=${encodeURIComponent('name:Al*')}`), ['Alice']);
+
+    // includeDeleted=0 must not return deleted rows.
+    const delRes = await fetch(`${url}/api/crud/user/${user2.id}`, { method: 'DELETE' });
+    assert.equal(delRes.status, 200);
+    assert.deepEqual(await names('includeDeleted=0'), ['Alice']);
+    assert.deepEqual(await names('includeDeleted=1'), ['Alice', 'Bob']);
   } finally {
     close();
     await sequelize.close();

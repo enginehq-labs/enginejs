@@ -140,6 +140,213 @@ test('CrudService: list handles junction field filters', async () => {
   }
 });
 
+/**
+ * Runs a bypass list on one `item` model and records the `where` that findAll receives.
+ * The Sequelize stubs return plain objects, so a test can read the built query.
+ */
+function buildFilterHarness(fields: Record<string, unknown>) {
+  const Op = {
+    and: Symbol('and'),
+    or: Symbol('or'),
+    in: Symbol('in'),
+    notIn: Symbol('notIn'),
+    ne: Symbol('ne'),
+    iLike: Symbol('iLike'),
+    contains: Symbol('contains'),
+    not: Symbol('not'),
+    gt: Symbol('gt'),
+    gte: Symbol('gte'),
+    lt: Symbol('lt'),
+    lte: Symbol('lte'),
+  };
+  const dsl = {
+    tag: { fields: { id: { type: 'int', primary: true } } },
+    item: { fields: { id: { type: 'int', primary: true }, ...fields } },
+  } as unknown as DslRoot;
+
+  const wheres: any[] = [];
+  const orm: OrmInitResult = {
+    sequelize: {
+      Sequelize: {
+        Op,
+        literal: (sql: string) => `LITERAL(${sql})`,
+        where: (left: unknown, cond: unknown) => ({ WHERE: left, cond }),
+        fn: (name: string, ...args: unknown[]) => ({ FN: name, args }),
+        col: (name: string) => ({ COL: name }),
+      },
+      escape: (v: unknown) => `'${v}'`,
+    } as any,
+    models: {
+      item__tags__to__tag__id: { findAll: async () => [] },
+      item: {
+        primaryKeyAttributes: ['id'],
+        associations: {},
+        findAll: async (opts: any) => {
+          wheres.push(opts.where);
+          return [];
+        },
+        count: async () => 0,
+      },
+    } as any,
+    junctionModels: {},
+    dsl,
+  };
+
+  const services = new DefaultServiceRegistry();
+  services.register('dsl', 'singleton', () => dsl);
+  services.register('orm', 'singleton', () => orm);
+  services.register('config', 'singleton', () => ({}) as EngineConfig);
+
+  const actor = { isAuthenticated: true, subjects: {}, roles: ['admin'], claims: {} };
+  const list = async (filters: string, find?: string) => {
+    await new CrudService({ services }).list({
+      actor,
+      modelKey: 'item',
+      query: { filters, ...(find != null ? { find } : {}) },
+      options: { bypassAclRls: true, runPipelines: false },
+    });
+    return wheres[wheres.length - 1];
+  };
+  return { list, Op };
+}
+
+test('CrudService: a filter on a save: false field adds no where part', async () => {
+  const { list } = buildFilterHarness({ nick: { type: 'string', save: false } });
+
+  assert.deepEqual(await list('nick:alice'), {});
+});
+
+test('CrudService: a filter on an integer junction field uses the junction subquery', async () => {
+  const { list, Op } = buildFilterHarness({ tags: { type: 'integer', multi: true, source: 'tag', sourceid: 'id' } });
+
+  const where = await list('tags:99');
+
+  assert.equal(where.tags, undefined, 'the filter must not reach the tags column');
+  assert.match(String(where.id?.[Op.in]), /SELECT "itemId" FROM "item__tags__to__tag__id" WHERE "tagId" = '99'/);
+});
+
+test('CrudService: a * in a string filter becomes the ILIKE wildcard', async () => {
+  const { list, Op } = buildFilterHarness({ name: { type: 'string' } });
+
+  const where = await list('name:Al*');
+
+  assert.equal(where.name?.[Op.iLike], 'Al%');
+});
+
+test('CrudService: a * in a string array filter becomes the ILIKE wildcard', async () => {
+  const { list, Op } = buildFilterHarness({ labels: { type: 'string', multi: true } });
+
+  const where = await list('labels:Al*');
+
+  assert.deepEqual(where.WHERE, { FN: 'array_to_string', args: [{ COL: 'labels' }, ' '] });
+  assert.equal(where.cond?.[Op.iLike], 'Al%');
+});
+
+test('CrudService: find searches auto_name and the canfind fields', async () => {
+  const { list, Op } = buildFilterHarness({ name: { type: 'string', canfind: true }, note: { type: 'string' } });
+
+  const where = await list('', 'ali');
+
+  assert.deepEqual(where, { [Op.or]: [{ auto_name: { [Op.iLike]: '%ali%' } }, { name: { [Op.iLike]: '%ali%' } }] });
+});
+
+test('CrudService: a * in find becomes the ILIKE wildcard', async () => {
+  const { list, Op } = buildFilterHarness({ name: { type: 'string', canfind: true } });
+
+  const where = await list('', 'Al*');
+
+  assert.deepEqual(where, { [Op.or]: [{ auto_name: { [Op.iLike]: 'Al%' } }, { name: { [Op.iLike]: 'Al%' } }] });
+});
+
+/**
+ * A `node` model with deleted and archived columns. Its mock association points back to
+ * the same model, so the include graph can grow as deep as the depth allows.
+ */
+function buildIncludeHarness() {
+  const Op = { and: Symbol('and'), or: Symbol('or') };
+  const dsl = {
+    node: {
+      fields: { id: { type: 'int', primary: true } },
+      access: { read: ['admin'], create: ['admin'], update: ['admin'], delete: ['admin'] },
+    },
+  } as unknown as DslRoot;
+
+  const calls: any[] = [];
+  const node: any = {
+    primaryKeyAttributes: ['id'],
+    rawAttributes: { id: {}, deleted: {}, archived: {} },
+    findAll: async (opts: any) => {
+      calls.push(opts);
+      return [];
+    },
+    count: async () => 0,
+    findOne: async (opts: any) => {
+      calls.push(opts);
+      return { id: 1 };
+    },
+  };
+  node.associations = { parent: { associationType: 'BelongsTo', target: node } };
+
+  const orm: OrmInitResult = {
+    sequelize: { Sequelize: { Op, literal: () => '' } } as any,
+    models: { node } as any,
+    junctionModels: {},
+    dsl,
+  };
+
+  const services = new DefaultServiceRegistry();
+  services.register('dsl', 'singleton', () => dsl);
+  services.register('orm', 'singleton', () => orm);
+  services.register('config', 'singleton', () => ({ rls: { subjects: {}, policies: {} } }) as unknown as EngineConfig);
+
+  const actor = { isAuthenticated: true, subjects: {}, roles: ['admin'], claims: {} };
+  const service = new CrudService({ services });
+  const last = () => calls[calls.length - 1];
+  return { service, actor, Op, last };
+}
+
+function includeLevels(include: any[] | undefined): number {
+  let levels = 0;
+  let current = include;
+  while (current && current.length) {
+    levels += 1;
+    current = current[0].include;
+  }
+  return levels;
+}
+
+test('CrudService: list with includeDeleted "0" keeps the deleted filter', async () => {
+  const { service, actor, Op, last } = buildIncludeHarness();
+
+  await service.list({ actor, modelKey: 'node', query: { includeDeleted: '0' } as any, options: { bypassAclRls: true, runPipelines: false } });
+
+  assert.deepEqual(last().where[Op.and], [{ deleted: false }, { archived: false }]);
+});
+
+test('CrudService: list with includeDeleted true removes the deleted filter', async () => {
+  const { service, actor, last } = buildIncludeHarness();
+
+  await service.list({ actor, modelKey: 'node', query: { includeDeleted: true }, options: { bypassAclRls: true, runPipelines: false } });
+
+  assert.deepEqual(last().where, { archived: false });
+});
+
+test('CrudService: read with includeDeleted "0" keeps the deleted filter', async () => {
+  const { service, actor, Op, last } = buildIncludeHarness();
+
+  await service.read({ actor, modelKey: 'node', id: 1, query: { includeDeleted: '0' } as any, options: { runPipelines: false } });
+
+  assert.deepEqual(last().where[Op.and], [{ id: 1 }, { deleted: false }, { archived: false }]);
+});
+
+test('CrudService: read caps includeDepth at 10', async () => {
+  const { service, actor, last } = buildIncludeHarness();
+
+  await service.read({ actor, modelKey: 'node', id: 1, query: { includeDepth: '50' } as any, options: { runPipelines: false } });
+
+  assert.equal(includeLevels(last().include), 10);
+});
+
 test('CrudService: create wraps operation in transaction if junction fields present', async () => {
   const dsl: DslRoot = {
     tag: { fields: { id: { type: 'int', primary: true } } },

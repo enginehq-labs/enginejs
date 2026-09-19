@@ -20,7 +20,15 @@ import { PipelineValidationError } from '../pipelines/errors.js';
 
 import { CrudBadRequestError, CrudForbiddenError, CrudNotFoundError } from './errors.js';
 import type { CrudAction, CrudCallOptions, CrudCtx, CrudListQuery, CrudListResult } from './types.js';
-import { stripVirtualFields, pruneUnknownPayload, normalizePayloadMultiFields, computeChangedFields } from './utils.js';
+import {
+  stripVirtualFields,
+  pruneUnknownPayload,
+  normalizePayloadMultiFields,
+  computeChangedFields,
+  isVirtualField,
+  isStringArrayField,
+  isJunctionIntFkField,
+} from './utils.js';
 
 function getSequelizeLib(orm: OrmInitResult) {
   const Seq = (orm.sequelize as any).Sequelize ?? (orm.sequelize as any).constructor;
@@ -323,19 +331,6 @@ function getModel(orm: OrmInitResult, modelKey: string): ModelStatic<Model> {
 
 
 
-// We will implement local helpers
-function isJunctionIntFkField(f: any): boolean {
-  if (!f || typeof f !== 'object') return false;
-  return f.type === 'int' && f.multi === true && !!f.source && !!f.sourceid;
-}
-function isStringArrayField(f: any): boolean {
-  if (!f || typeof f !== 'object') return false;
-  return f.type === 'string' && f.multi === true && !f.source;
-}
-function isVirtualField(f: any): boolean {
-  return f?.virtual === true;
-}
-
 function buildFilterExpr({
   orm,
   modelKey,
@@ -376,7 +371,7 @@ function buildFilterExpr({
     if (expr.op === 'eq') return { [field]: { [Op.contains]: [expr.value] } };
     if (expr.op === 'ne') return { [Op.not]: { [field]: { [Op.contains]: [expr.value] } } };
     if (expr.op === 'like') {
-      const v = String(expr.value || '').replace(/\\*/g, '%');
+      const v = String(expr.value || '').replace(/\*/g, '%');
       return where(
         fn('array_to_string', col(field), ' '),
         { [Op.iLike]: v.includes('%') ? v : `%${v}%` }
@@ -385,7 +380,7 @@ function buildFilterExpr({
     throw new CrudBadRequestError(`Unsupported filter op for string[] field: ${expr.op}`);
   }
 
-  const vLike = String(expr.value || '').replace(/\\*/g, '%');
+  const vLike = String(expr.value || '').replace(/\*/g, '%');
   const pattern = vLike.includes('%') ? vLike : `%${vLike}%`;
 
   if (expr.op === 'eq') return { [field]: expr.value };
@@ -431,6 +426,84 @@ function filtersToWhere(
 
   if (!parts.length) return null;
   return parts.length === 1 ? parts[0] : { [Op.and]: parts };
+}
+
+function toLikePattern(raw: string): string {
+  const s = raw.trim();
+  if (s.includes('*')) return s.replace(/\*/g, '%');
+  return `%${s}%`;
+}
+
+/**
+ * Builds the `find` search part of a list query. It searches auto_name and each canfind
+ * field. A canfind foreign key field matches through the auto_name of the target model.
+ * With enforce on, that lookup applies the target ACL and RLS, as a list of the target
+ * does. The lookup uses at most 500 target IDs.
+ */
+async function findToWhere(args: {
+  orm: OrmInitResult;
+  dsl: DslRoot;
+  actor: Actor;
+  spec: DslModelSpec;
+  ast: ListQueryAst;
+  enforce: boolean;
+  rls?: RlsEngine;
+}): Promise<any | null> {
+  const { orm, dsl, actor, spec, ast } = args;
+  const { Op, where, fn, col } = getSequelizeLib(orm);
+  const term = ast.find?.trim();
+  if (!term) return null;
+  const pattern = toLikePattern(term);
+
+  const orParts: any[] = [{ auto_name: { [Op.iLike]: pattern } }];
+
+  for (const [field, f] of Object.entries(spec.fields || {})) {
+    if (!f || typeof f !== 'object') continue;
+    if ((f as any).canfind !== true) continue;
+    if (isVirtualField(f as any)) continue;
+
+    if (isStringArrayField(f as any)) {
+      orParts.push(where(fn('array_to_string', col(field), ' '), { [Op.iLike]: pattern }));
+      continue;
+    }
+
+    const source = (f as any).source;
+    const sourceid = (f as any).sourceid;
+    if (source && sourceid) {
+      const targetKey = String(source);
+      const targetSpec = dsl[targetKey];
+      const targetModel = (orm.models as any)[targetKey];
+      if (!isDslModelSpec(targetSpec) || !targetModel) continue;
+
+      const targetWhereParts: any[] = [];
+      if (args.enforce) {
+        const aclRes = new AclEngine().can({ actor, modelKey: targetKey, modelSpec: targetSpec, action: 'read' });
+        if (!aclRes.allow) continue;
+        const scope = args.rls!.scope({ actor, modelKey: targetKey, action: 'list' });
+        if (!scope.allow) continue;
+        const scopeWhere = rlsWhereToSequelize(orm, targetKey, (scope as any).where);
+        if (scopeWhere) targetWhereParts.push(scopeWhere);
+      }
+      if (!ast.includeDeleted) targetWhereParts.push({ deleted: false });
+      if (!ast.includeArchived) targetWhereParts.push({ archived: false });
+      targetWhereParts.push({ auto_name: { [Op.iLike]: pattern } });
+
+      const ids = (await targetModel.findAll({
+        attributes: [String(sourceid)],
+        where: { [Op.and]: targetWhereParts },
+        raw: true,
+        limit: 500,
+      })) as Array<Record<string, unknown>>;
+      const values = ids.map((r) => r[String(sourceid)]).filter((x) => x != null);
+      if (values.length) orParts.push({ [field]: { [Op.in]: values } });
+      continue;
+    }
+
+    const type = String((f as any).type || '').toLowerCase();
+    if (type === 'string' || type === 'text') orParts.push({ [field]: { [Op.iLike]: pattern } });
+  }
+
+  return { [Op.or]: orParts };
 }
 
 function sortToOrder(sort: SortSpec[], pkField: string, spec?: DslModelSpec): any[] {
@@ -664,8 +737,8 @@ export class CrudService {
 
       const q = args.query || {};
       const ast = parseListQuery({
-        ...(q.includeDeleted ? { includeDeleted: '1' } : {}),
-        ...(q.includeArchived ? { includeArchived: '1' } : {}),
+        ...(q.includeDeleted != null ? { includeDeleted: q.includeDeleted } : {}),
+        ...(q.includeArchived != null ? { includeArchived: q.includeArchived } : {}),
         ...(q.includeDepth != null ? { includeDepth: String(q.includeDepth) } : {}),
         ...(q.page != null ? { page: String(q.page) } : {}),
         ...(q.limit != null ? { limit: String(q.limit) } : {}),
@@ -681,6 +754,8 @@ export class CrudService {
       if (scopeWhere) whereParts.push(scopeWhere);
       const filterWhere = filtersToWhere(ast, orm, model, spec, args.modelKey);
       if (filterWhere) whereParts.push(filterWhere);
+      const findWhere = await findToWhere({ orm, dsl, actor: args.actor, spec, ast, enforce: true, rls });
+      if (findWhere) whereParts.push(findWhere);
       const where = whereParts.length <= 1 ? (whereParts[0] ?? {}) : { [Op.and]: whereParts };
 
       const pk = getPrimaryKeyField(model);
@@ -760,8 +835,8 @@ export class CrudService {
     try {
       const q = args.query || {};
       ast = parseListQuery({
-        ...(q.includeDeleted ? { includeDeleted: '1' } : {}),
-        ...(q.includeArchived ? { includeArchived: '1' } : {}),
+        ...(q.includeDeleted != null ? { includeDeleted: q.includeDeleted } : {}),
+        ...(q.includeArchived != null ? { includeArchived: q.includeArchived } : {}),
         ...(q.includeDepth != null ? { includeDepth: String(q.includeDepth) } : {}),
         ...(q.page != null ? { page: String(q.page) } : {}),
         ...(q.limit != null ? { limit: String(q.limit) } : {}),
@@ -779,6 +854,9 @@ export class CrudService {
     if (!ast.includeArchived && (model as any).rawAttributes?.archived) whereParts.push({ archived: false });
     const filterWhere = filtersToWhere(ast, orm, model, spec, args.modelKey);
     if (filterWhere) whereParts.push(filterWhere);
+    // bypassAclRls skips ACL and RLS, so the foreign key lookup skips them too.
+    const findWhere = await findToWhere({ orm, dsl, actor: args.actor, spec, ast, enforce: false });
+    if (findWhere) whereParts.push(findWhere);
     const where = whereParts.length <= 1 ? (whereParts[0] ?? {}) : { [Op.and]: whereParts };
 
     const pk = getPrimaryKeyField(model);
@@ -1066,8 +1144,12 @@ export class CrudService {
     const config = this.getConfig();
     const spec = modelSpec(dsl, args.modelKey);
     const model = getModel(orm, args.modelKey);
-    const includeDeleted = !!args.query?.includeDeleted;
-    const includeArchived = !!args.query?.includeArchived;
+    // Parse the flags and the depth as list() does: '0' is false, and the depth is capped.
+    const { includeDeleted, includeArchived, includeDepth } = parseListQuery({
+      includeDeleted: args.query?.includeDeleted,
+      includeArchived: args.query?.includeArchived,
+      includeDepth: args.query?.includeDepth,
+    });
     const pk = getPrimaryKeyField(model);
 
     const bypass = args.options?.bypassAclRls === true;
@@ -1088,7 +1170,6 @@ export class CrudService {
       if (scopeWhere) whereParts.push(scopeWhere);
       const where = whereParts.length === 1 ? whereParts[0]! : { [getSequelizeLib(orm).Op.and]: whereParts };
 
-      const includeDepth = Number(args.query?.includeDepth) || 0;
       const include = includeDepth > 0
         ? buildIncludeGraph({
             orm,
@@ -1134,7 +1215,6 @@ export class CrudService {
     if (!includeDeleted && (model as any).rawAttributes?.deleted) whereParts.push({ deleted: false });
     if (!includeArchived && (model as any).rawAttributes?.archived) whereParts.push({ archived: false });
     const where = whereParts.length === 1 ? whereParts[0]! : { [getSequelizeLib(orm).Op.and]: whereParts };
-    const includeDepth = Number(args.query?.includeDepth) || 0;
     const include = includeDepth > 0
       ? buildIncludeGraph({
           orm,
